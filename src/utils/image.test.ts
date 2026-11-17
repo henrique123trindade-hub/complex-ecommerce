@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildSrcSet,
   getImageVariant,
+  getOptimizedFallbackUrl,
   normalizeImageKey,
   resolveResponsiveSizes,
   shouldBypassProgressiveBlur,
@@ -14,37 +15,48 @@ test('normalizeImageKey strips query strings and normalizes relative/origin URLs
     '/src/assets/images/product_hoodie_taupe_1794952251370.jpg'
   );
   assert.equal(
-    normalizeImageKey('http://localhost:3000/assets/aistudio/image_e60999db.png'),
-    '/assets/aistudio/image_e60999db.png'
+    normalizeImageKey('http://localhost:3000/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_47-1_5292459e.png'),
+    '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_47-1_5292459e.png'
   );
   assert.equal(normalizeImageKey(undefined), '');
 });
 
-test('getImageVariant resolves local assets to WebP manifest entries with LQIP blurDataUrl', () => {
-  const hero = getImageVariant('/assets/aistudio/image_e60999db.png');
+test('getImageVariant resolves local assets to responsive AVIF/WebP manifest entries with LQIP blurDataUrl', () => {
+  const hero = getImageVariant('/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_47-1_5292459e.png');
   assert.ok(hero);
   assert.equal(hero.width, 1672);
   assert.equal(hero.height, 941);
   assert.ok(hero.webpSrc.endsWith('.webp'));
+  assert.ok(hero.fallbackSrc.endsWith('.webp'));
   assert.ok(hero.blurDataUrl.startsWith('data:image/webp;base64,'));
-  assert.ok(hero.variants.length >= 3);
+  assert.ok(hero.variants.some((v) => v.width === 400));
+  assert.ok(hero.variants.some((v) => v.width === 800));
+  assert.ok(hero.variants.some((v) => v.width === 1200));
+  assert.ok(hero.avifVariants && hero.avifVariants.some((v) => v.width === 1672));
 
   const product = getImageVariant('/src/assets/images/product_hoodie_taupe_1794952251370.jpg');
   assert.ok(product);
-  assert.equal(product.fallbackSrc, '/src/assets/images/product_hoodie_taupe_1794952251370.jpg');
-  assert.ok(product.variants.some((v) => v.width === 480));
-  assert.ok(product.variants.some((v) => v.width === 768));
+  assert.ok(product.fallbackSrc.endsWith('-800w.webp'));
+  assert.ok(product.variants.some((v) => v.width === 400));
+  assert.ok(product.variants.some((v) => v.width === 800));
 
   assert.equal(getImageVariant('https://example.com/custom.jpg'), null);
+  assert.equal(
+    getOptimizedFallbackUrl('/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_47-1_5292459e.png'),
+    hero.fallbackSrc
+  );
+  const directWebp = getImageVariant('/src/assets/images/optimized/complex_campaign_1_5292459e-1672w.webp');
+  assert.ok(directWebp);
+  assert.equal(directWebp.webpSrc, hero.webpSrc);
 });
 
 test('buildSrcSet orders variants ascending by width', () => {
   const srcSet = buildSrcSet([
-    { width: 896, url: '/img-896w.webp' },
-    { width: 480, url: '/img-480w.webp' },
-    { width: 768, url: '/img-768w.webp' },
+    { width: 1200, url: '/img-1200w.webp' },
+    { width: 400, url: '/img-400w.webp' },
+    { width: 800, url: '/img-800w.webp' },
   ]);
-  assert.equal(srcSet, '/img-480w.webp 480w, /img-768w.webp 768w, /img-896w.webp 896w');
+  assert.equal(srcSet, '/img-400w.webp 400w, /img-800w.webp 800w, /img-1200w.webp 1200w');
   assert.equal(buildSrcSet([]), '');
 });
 

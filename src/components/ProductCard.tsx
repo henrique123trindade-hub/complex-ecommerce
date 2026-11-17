@@ -7,12 +7,14 @@ interface ProductCardProps {
   product: Product;
   onSelect: (slug: string) => void;
   priority?: boolean;
+  eager?: boolean;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   onSelect,
   priority = false,
+  eager = false,
 }) => {
   const [hovered, setHovered] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -40,13 +42,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               alt={product.name}
               sizes="card"
               priority={priority}
+              eager={eager}
               onError={() => setImgError(true)}
               className={`absolute inset-0 w-full h-full product-hover-zoom ${
                 hovered && secondaryImage !== primaryImage
                   ? 'opacity-0 scale-[1.02] motion-reduce:scale-100'
                   : 'opacity-100 group-hover:scale-[1.02] motion-reduce:group-hover:scale-100'
               }`}
-              imgClassName="w-full h-full object-cover object-center"
+              imgClassName="w-full h-full object-cover object-[50%_18%]"
             />
             {secondaryImage !== primaryImage && (
               <OptimizedImage
@@ -59,7 +62,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                     ? 'opacity-100 scale-100'
                     : 'opacity-0 scale-[1.015] motion-reduce:scale-100'
                 }`}
-                imgClassName="w-full h-full object-cover object-center"
+                imgClassName="w-full h-full object-cover object-[50%_18%]"
               />
             )}
           </>

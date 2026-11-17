@@ -148,8 +148,63 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         getDoc(doc(db, 'editorial', 'homepage')),
       ]);
 
+      const legacyImageMap: Record<string, string> = {
+        '/assets/aistudio/image_e60999db.png': DEFAULT_EDITORIAL.heroDesktopImage,
+        '/src/assets/images/hero_mobile_campaign_1794952246363.jpg':
+          DEFAULT_EDITORIAL.heroMobileImage,
+        '/src/assets/images/editorial_urban_tee_1794952249745.jpg':
+          DEFAULT_EDITORIAL.campaignImage,
+        '/assets/aistudio/image_340e3e49.png': DEFAULT_EDITORIAL.storyImage,
+        '/src/assets/images/campaign_night_lifestyle_1794952250620.jpg':
+          '/src/assets/images/optimized/complex_campaign_dusk_4_87617fd1-1672w.webp',
+        '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_47-1_5292459e.png':
+          '/src/assets/images/optimized/complex_campaign_1_5292459e-1672w.webp',
+        '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_48-2_ca8505d2.png':
+          '/src/assets/images/optimized/complex_model_tee_2_ca8505d2-1122w.webp',
+        '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_48-3_41227f9c.png':
+          '/src/assets/images/optimized/complex_model_hoodie_3_41227f9c-1122w.webp',
+        '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_49-4_87617fd1.png':
+          '/src/assets/images/optimized/complex_campaign_dusk_4_87617fd1-1672w.webp',
+        '/assets/aistudio/image_2e7943ba.png': '/src/assets/images/optimized/image_2e7943ba-786w.webp',
+        '/src/assets/images/product_detail_cotton_1794952250261.jpg':
+          '/src/assets/images/optimized/product_detail_cotton_1794952250261-1200w.webp',
+        '/src/assets/images/product_boxy_tee_front_1794952251135.jpg':
+          '/src/assets/images/optimized/product_boxy_tee_front_1794952251135-896w.webp',
+        '/src/assets/images/product_boxy_tee_back_1794952252777.jpg':
+          '/src/assets/images/optimized/product_boxy_tee_back_1794952252777-896w.webp',
+        '/src/assets/images/product_tee_bone_1794952275758.jpg':
+          '/src/assets/images/optimized/product_tee_bone_1794952275758-896w.webp',
+        '/src/assets/images/product_hoodie_taupe_1794952251370.jpg':
+          '/src/assets/images/optimized/product_hoodie_taupe_1794952251370-896w.webp',
+        '/src/assets/images/product_hoodie_charcoal_1794952276198.jpg':
+          '/src/assets/images/optimized/product_hoodie_charcoal_1794952276198-896w.webp',
+        '/src/assets/images/product_crewneck_olive_1794952278742.jpg':
+          '/src/assets/images/optimized/product_crewneck_olive_1794952278742-896w.webp',
+        '/src/assets/images/product_cargo_olive_1794952252317.jpg':
+          '/src/assets/images/optimized/product_cargo_olive_1794952252317-896w.webp',
+        '/src/assets/images/product_denim_wide_1794952276236.jpg':
+          '/src/assets/images/optimized/product_denim_wide_1794952276236-896w.webp',
+        '/src/assets/images/product_jacket_shell_1794952276902.jpg':
+          '/src/assets/images/optimized/product_jacket_shell_1794952276902-896w.webp',
+        '/src/assets/images/product_accessories_cap_1794952253579.jpg':
+          '/src/assets/images/optimized/product_accessories_cap_1794952253579-896w.webp',
+      };
+      const mapLegacyUrl = (url: string): string => legacyImageMap[url] || url;
+
       if (!prodSnap.empty) {
-        const loadedProducts = prodSnap.docs.map((d) => d.data() as Product);
+        const loadedProducts = prodSnap.docs.map((d) => {
+          const data = d.data() as Product;
+          return {
+            ...data,
+            images: Array.isArray(data.images) ? data.images.map(mapLegacyUrl) : [],
+            colors: Array.isArray(data.colors)
+              ? data.colors.map((c) => ({
+                  ...c,
+                  images: Array.isArray(c.images) ? c.images.map(mapLegacyUrl) : [],
+                }))
+              : [],
+          };
+        });
         setProducts(loadedProducts);
         setCatalogSource('firestore');
       } else {
@@ -158,7 +213,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       if (!catSnap.empty) {
-        setCategories(catSnap.docs.map((d) => d.data() as CategoryItem));
+        setCategories(
+          catSnap.docs.map((d) => {
+            const data = d.data() as CategoryItem;
+            return {
+              ...data,
+              image: data.image ? mapLegacyUrl(data.image) : data.image,
+            };
+          })
+        );
       } else {
         setCategories(DEMO_CATEGORIES);
       }
@@ -173,6 +236,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             rawEd.campaignTitle === 'BUILT FOR EVERYDAY.'
               ? 'FEITO PARA O DIA A DIA.'
               : rawEd.campaignTitle,
+          heroDesktopImage: rawEd.heroDesktopImage
+            ? mapLegacyUrl(rawEd.heroDesktopImage)
+            : DEFAULT_EDITORIAL.heroDesktopImage,
+          heroMobileImage: rawEd.heroMobileImage
+            ? mapLegacyUrl(rawEd.heroMobileImage)
+            : DEFAULT_EDITORIAL.heroMobileImage,
+          campaignImage: rawEd.campaignImage
+            ? mapLegacyUrl(rawEd.campaignImage)
+            : DEFAULT_EDITORIAL.campaignImage,
+          storyImage: rawEd.storyImage
+            ? mapLegacyUrl(rawEd.storyImage)
+            : DEFAULT_EDITORIAL.storyImage,
         };
         setEditorial({ ...DEFAULT_EDITORIAL, ...normalizedEd });
       } else {

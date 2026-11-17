@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
+import { BrandMark } from './BrandMark';
 
 interface FooterProps {
   onNavigate: (path: string) => void;
@@ -132,9 +133,12 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
         {/* Bottom Wordmark Lockup */}
         <div className="pt-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <span className="font-display text-3xl md:text-5xl font-extrabold tracking-[-0.04em] leading-none">
-            COMPLEX
-          </span>
+          <div className="inline-flex items-center gap-3 text-[#171717]">
+            <BrandMark className="w-11 h-5 md:w-14 md:h-7 shrink-0" />
+            <span className="font-display text-3xl md:text-5xl font-extrabold tracking-[-0.04em] leading-none">
+              COMPLEX
+            </span>
+          </div>
           <div className="flex flex-wrap items-center gap-4 font-mono-tabular text-[11px] uppercase tracking-[0.12em] text-[#99968F]">
             <span>Streetwear Independente</span>
             <span aria-hidden="true">/</span>

@@ -13,6 +13,7 @@ import type {
 import { STORE_ASSETS } from '../data/assets';
 import { formatBrl } from '../utils/commerce';
 import { formatFirebaseAuthError } from '../utils/authErrors';
+import { OptimizedImage } from '../components/OptimizedImage';
 
 interface AdminPageProps {
   onNavigate: (path: string) => void;
@@ -533,7 +534,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {editingProduct.images.map((imgUrl, idx) => (
                       <div key={idx} className="border border-[#171717]/15 p-2 space-y-2">
-                        <img src={imgUrl} alt={`Foto ${idx + 1}`} className="w-full aspect-[3/4] object-cover" />
+                        <OptimizedImage src={imgUrl} alt={`Foto ${idx + 1}`} sizes="thumb" className="w-full aspect-[3/4]" imgClassName="w-full h-full object-cover object-[50%_18%]" />
                         <input
                           type="text"
                           value={imgUrl}
@@ -602,10 +603,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
                     key={p.id}
                     className="bg-[#F1EEE8] border border-[#171717]/15 p-4 flex items-center gap-4"
                   >
-                    <img
+                    <OptimizedImage
                       src={p.images[0]}
                       alt={p.name}
-                      className="w-16 aspect-[3/4] object-cover bg-[#EAE6DF]"
+                      sizes="thumb"
+                      className="w-16 aspect-[3/4] shrink-0 bg-[#EAE6DF]"
+                      imgClassName="w-full h-full object-cover object-[50%_18%]"
                     />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">
@@ -906,7 +909,7 @@ const CategoryEditorRow: React.FC<{
       className="bg-[#F1EEE8] border border-[#171717]/15 p-5 space-y-3"
     >
       <div className="flex items-center gap-4">
-        <img src={draft.image} alt={draft.name} className="w-14 aspect-[3/4] object-cover" />
+        <OptimizedImage src={draft.image} alt={draft.name} sizes="thumb" className="w-14 aspect-[3/4] shrink-0" imgClassName="w-full h-full object-cover object-top" />
         <div className="flex-1 space-y-2">
           <input
             type="text"

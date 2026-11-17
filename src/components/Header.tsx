@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowUpRight, Menu, Search, ShoppingBag, User, X } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
+import { BrandMark } from './BrandMark';
 
 interface HeaderProps {
   currentPath: string;
@@ -119,15 +120,16 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
             </nav>
           </div>
 
-          {/* Center: Wordmark COMPLEX */}
+          {/* Center: BrandMark + Wordmark COMPLEX */}
           <div className="flex items-center justify-center shrink-0">
             <button
               type="button"
               onClick={() => handleNav('/')}
               aria-label="COMPLEX — Página Inicial"
-              className="font-display text-[20px] md:text-[22px] font-extrabold tracking-[-0.04em] text-[#171717] uppercase whitespace-nowrap shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-2 font-display text-[20px] md:text-[22px] font-extrabold tracking-[-0.04em] text-[#171717] uppercase whitespace-nowrap shrink-0 cursor-pointer hover:opacity-85 transition-opacity duration-200"
             >
-              COMPLEX
+              <BrandMark className="w-7 h-3.5 md:w-8 md:h-4 text-[#171717] shrink-0" />
+              <span>COMPLEX</span>
             </button>
           </div>
 
@@ -204,9 +206,10 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
               <button
                 type="button"
                 onClick={() => handleNav('/')}
-                className="font-display text-[20px] font-extrabold tracking-[-0.04em] uppercase cursor-pointer"
+                className="inline-flex items-center gap-1.5 font-display text-[20px] font-extrabold tracking-[-0.04em] uppercase cursor-pointer"
               >
-                COMPLEX
+                <BrandMark className="w-6 h-3 text-[#171717] shrink-0" />
+                <span>COMPLEX</span>
               </button>
               <button
                 type="button"

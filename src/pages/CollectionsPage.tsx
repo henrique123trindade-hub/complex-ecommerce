@@ -15,34 +15,38 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ onNavigate }) 
     {
       index: 'PRODUÇÃO 01',
       title: 'Concreto & Peso Bruto',
-      description: 'Sobreposição de malha encorpada estonada e calça ampla com recorte arquitetônico.',
+      description: 'Camiseta oversized taupe e moletom estonado carvão com identidade COMPLEX em arquitetura brutalista.',
       image: STORE_ASSETS.heroDesktop.url,
+      aspectClass: 'aspect-[16/9]',
       productSlug: products[0]?.slug || 'washed-essential-hoodie',
       productLabel: 'Ver Moletom Essencial Estonado',
     },
     {
       index: 'PRODUÇÃO 02',
       title: 'Silhueta Urbana Diurna',
-      description: 'Camiseta boxy de ombro deslocado combinada ao volume amplo do jeans lavado.',
+      description: 'Camiseta boxy preta estonada com assinatura gráfica COMPLEX combinada ao jeans wide-leg.',
       image: STORE_ASSETS.editorialUrban.url,
+      aspectClass: 'aspect-[4/5]',
       productSlug: 'heavyweight-box-tee',
       productLabel: 'Ver Camiseta Boxy Pesada',
     },
     {
       index: 'PRODUÇÃO 03',
       title: 'Estudo de Volume em Estúdio',
-      description: 'Capuz estruturado sem cordão e tingimento mineral em cinza estonado.',
+      description: 'Conjunto em carvão estonado com moletom heavyweight COMPLEX e calça ampla com patch.',
       image: STORE_ASSETS.editorialStudioHoodie.url,
+      aspectClass: 'aspect-[4/5]',
       productSlug: 'wide-architectural-denim',
       productLabel: 'Ver Calça Jeans Wide Arquitetônica',
     },
     {
       index: 'PRODUÇÃO 04',
-      title: 'Série Noturna Utilitária',
-      description: 'Jaqueta fosca em poliamida técnica e calça cargo ripstop em oliva.',
+      title: 'Série Entardecer Brutalista',
+      description: 'Composição dupla ao pôr do sol com moletom estonado, camiseta gráfica taupe e jeans arquitetônico.',
       image: STORE_ASSETS.campaignNight.url,
-      productSlug: 'cropped-storm-shell-jacket',
-      productLabel: 'Ver Jaqueta Corta-Vento Cropped',
+      aspectClass: 'aspect-[16/9]',
+      productSlug: 'everyday-oversized-tee',
+      productLabel: 'Ver Camiseta Oversized Diária',
     },
   ];
 
@@ -67,14 +71,14 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ onNavigate }) 
             className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center pb-14 border-b border-[#171717]/10 last:border-b-0"
           >
             <div className={`lg:col-span-7 ${idx % 2 === 1 ? 'lg:order-2' : ''}`}>
-              <div className="aspect-[4/5] md:aspect-[16/11] bg-[#EAE6DF] overflow-hidden">
+              <div className={`${look.aspectClass} bg-[#EAE6DF] overflow-hidden`}>
                 <OptimizedImage
                   src={look.image}
                   alt={look.title}
                   sizes="split"
                   priority={idx === 0}
                   className="w-full h-full"
-                  imgClassName="w-full h-full object-cover object-top"
+                  imgClassName="w-full h-full object-cover object-[50%_18%]"
                 />
               </div>
             </div>

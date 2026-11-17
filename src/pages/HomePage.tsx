@@ -51,23 +51,15 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
     <main className="bg-[#F1EEE8] text-[#171717]">
       {/* B. HERO EDITORIAL */}
       <section className="relative w-full h-[78vh] min-h-[540px] max-h-[820px] bg-[#171717] overflow-hidden">
-        {/* Desktop 16:9 image */}
+        {/* Art-directed LCP Hero picture: downloads ONLY desktop OR mobile source */}
         <OptimizedImage
           src={editorial.heroDesktopImage || STORE_ASSETS.heroDesktop.url}
+          mobileSrc={editorial.heroMobileImage || STORE_ASSETS.heroMobile.url}
           alt={STORE_ASSETS.heroDesktop.alt}
           sizes="hero"
           priority
-          className="hidden md:block absolute inset-0 w-full h-full"
-          imgClassName="w-full h-full object-cover object-[50%_22%]"
-        />
-        {/* Mobile 3:4 vertical image */}
-        <OptimizedImage
-          src={editorial.heroMobileImage || STORE_ASSETS.heroMobile.url}
-          alt={STORE_ASSETS.heroMobile.alt}
-          sizes="hero"
-          priority
-          className="md:hidden absolute inset-0 w-full h-full"
-          imgClassName="w-full h-full object-cover object-[50%_20%]"
+          className="absolute inset-0 w-full h-full"
+          imgClassName="w-full h-full object-cover object-top md:object-[50%_8%]"
         />
 
         {/* Measured contrast scrim */}
@@ -149,11 +141,10 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-10 md:gap-x-6">
-          {newArrivals.map((product, index) => (
+          {newArrivals.map((product) => (
             <ProductCard
               key={product.id}
               product={product}
-              priority={index < 2}
               onSelect={(slug) => onNavigate(`/product/${slug}`)}
             />
           ))}
@@ -163,13 +154,13 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       {/* D. FEATURED CAMPAIGN */}
       <section className="max-w-[1440px] mx-auto px-4 md:px-8 pb-16 md:pb-22">
         <div className="grid grid-cols-1 lg:grid-cols-12 items-stretch bg-[#171717] text-[#F1EEE8]">
-          <div className="lg:col-span-6 relative aspect-[4/5] lg:aspect-auto lg:min-h-[560px] overflow-hidden bg-[#222222]">
+          <div className="lg:col-span-6 relative aspect-[4/5] lg:aspect-auto lg:h-[640px] overflow-hidden bg-[#222222]">
             <OptimizedImage
               src={editorial.campaignImage || STORE_ASSETS.editorialUrban.url}
               alt={STORE_ASSETS.editorialUrban.alt}
               sizes="split"
               className="w-full h-full bg-[#222222]"
-              imgClassName="w-full h-full object-cover object-[50%_18%]"
+              imgClassName="w-full h-full object-cover object-[50%_12%]"
             />
           </div>
 

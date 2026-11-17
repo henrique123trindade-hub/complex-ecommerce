@@ -35,7 +35,7 @@ export const DEMO_CATEGORIES: CategoryItem[] = [
     name: 'Camisetas',
     slug: 'Tees',
     description: 'Camisetas boxy em algodão encorpado.',
-    image: STORE_ASSETS.boxyTeeFront.url,
+    image: STORE_ASSETS.editorialUrban.url,
     orderIndex: 1,
   },
   {
@@ -157,19 +157,19 @@ export const DEMO_PRODUCTS: Product[] = [
     isDemo: true,
     active: true,
     images: [
+      STORE_ASSETS.editorialUrban.url,
       STORE_ASSETS.boxyTeeFront.url,
       STORE_ASSETS.boxyTeeBack.url,
-      STORE_ASSETS.editorialUrban.url,
-      STORE_ASSETS.detailCotton.url,
+      STORE_ASSETS.campaignNight.url,
     ],
     colors: [
       {
         name: 'Preto Estonado',
         hex: '#262626',
         images: [
+          STORE_ASSETS.editorialUrban.url,
           STORE_ASSETS.boxyTeeFront.url,
           STORE_ASSETS.boxyTeeBack.url,
-          STORE_ASSETS.editorialUrban.url,
           STORE_ASSETS.detailCotton.url,
         ],
       },
@@ -214,21 +214,21 @@ export const DEMO_PRODUCTS: Product[] = [
     isDemo: true,
     active: true,
     images: [
+      STORE_ASSETS.heroDesktop.url,
       STORE_ASSETS.boneTeeFront.url,
+      STORE_ASSETS.campaignNight.url,
       STORE_ASSETS.boxyTeeFront.url,
-      STORE_ASSETS.boxyTeeBack.url,
-      STORE_ASSETS.detailCotton.url,
     ],
     colors: [
       {
         name: 'Bone Natural',
         hex: '#EDE8DC',
-        images: [STORE_ASSETS.boneTeeFront.url, STORE_ASSETS.detailCotton.url],
+        images: [STORE_ASSETS.boneTeeFront.url, STORE_ASSETS.heroDesktop.url, STORE_ASSETS.detailCotton.url],
       },
       {
         name: 'Carvão Lavado',
         hex: '#2E2E2E',
-        images: [STORE_ASSETS.boxyTeeFront.url, STORE_ASSETS.boxyTeeBack.url],
+        images: [STORE_ASSETS.editorialUrban.url, STORE_ASSETS.boxyTeeFront.url, STORE_ASSETS.boxyTeeBack.url],
       },
     ],
     sizes: [
@@ -265,13 +265,13 @@ export const DEMO_PRODUCTS: Product[] = [
     images: [
       STORE_ASSETS.denimWide.url,
       STORE_ASSETS.editorialStudioHoodie.url,
-      STORE_ASSETS.detailCotton.url,
+      STORE_ASSETS.editorialUrban.url,
     ],
     colors: [
       {
         name: 'Carvão Estonado',
         hex: '#313234',
-        images: [STORE_ASSETS.denimWide.url, STORE_ASSETS.editorialStudioHoodie.url],
+        images: [STORE_ASSETS.denimWide.url, STORE_ASSETS.editorialStudioHoodie.url, STORE_ASSETS.editorialUrban.url],
       },
     ],
     sizes: [

@@ -9,9 +9,11 @@ import {
 
 interface OptimizedImageProps {
   src: string;
+  mobileSrc?: string;
   alt: string;
   sizes?: ResponsiveSizesPreset | string;
   priority?: boolean;
+  eager?: boolean;
   className?: string;
   imgClassName?: string;
   style?: React.CSSProperties;
@@ -23,9 +25,11 @@ interface OptimizedImageProps {
 
 export const OptimizedImage: React.FC<OptimizedImageProps> = ({
   src,
+  mobileSrc,
   alt,
   sizes = 'card',
   priority = false,
+  eager = false,
   className = 'w-full h-full',
   imgClassName = 'w-full h-full object-cover',
   style,
@@ -35,28 +39,47 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
   disablePlaceholder = false,
 }) => {
   const variant = useMemo(() => getImageVariant(src), [src]);
+  const mobileVariant = useMemo(
+    () => (mobileSrc ? getImageVariant(mobileSrc) : null),
+    [mobileSrc]
+  );
+
   const bypassBlur = disablePlaceholder || shouldBypassProgressiveBlur(src);
   const [loaded, setLoaded] = useState<boolean>(bypassBlur);
   const [errored, setErrored] = useState<boolean>(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
+  const avifSrcSet = useMemo(
+    () => (variant?.avifVariants ? buildSrcSet(variant.avifVariants) : ''),
+    [variant]
+  );
   const webpSrcSet = useMemo(
     () => (variant ? buildSrcSet(variant.variants) : ''),
     [variant]
   );
+
+  const mobileAvifSrcSet = useMemo(
+    () => (mobileVariant?.avifVariants ? buildSrcSet(mobileVariant.avifVariants) : ''),
+    [mobileVariant]
+  );
+  const mobileWebpSrcSet = useMemo(
+    () => (mobileVariant ? buildSrcSet(mobileVariant.variants) : ''),
+    [mobileVariant]
+  );
+
   const resolvedSizes = useMemo(() => resolveResponsiveSizes(sizes), [sizes]);
 
   useEffect(() => {
     setErrored(false);
     setLoaded(bypassBlur);
-  }, [src, bypassBlur]);
+  }, [src, mobileSrc, bypassBlur]);
 
   useLayoutEffect(() => {
     const el = imgRef.current;
     if (el && el.complete && el.naturalWidth > 0) {
       setLoaded(true);
     }
-  }, [src]);
+  }, [src, mobileSrc]);
 
   const handleLoad = () => {
     setLoaded(true);
@@ -72,45 +95,89 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
   const showPlaceholder = !loaded && !errored && !bypassBlur;
   const hasPositionClass = /\b(absolute|fixed|sticky)\b/.test(className);
 
+  const renderPlaceholder = () => {
+    if (!showPlaceholder) return null;
+    if (variant?.blurDataUrl) {
+      return (
+        <img
+          src={variant.blurDataUrl}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          style={style}
+          className="absolute inset-0 w-full h-full object-cover scale-110 blur-lg pointer-events-none select-none"
+        />
+      );
+    }
+    return (
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[#E4DFD6] animate-pulse pointer-events-none"
+      />
+    );
+  };
+
+  const imgClasses = `${imgClassName} transition-[opacity,filter,transform] duration-300 ease-out motion-reduce:transition-none ${
+    loaded ? 'opacity-100 blur-0' : 'opacity-0 blur-sm scale-[1.02]'
+  }`;
+
   return (
     <div className={`${hasPositionClass ? '' : 'relative '}overflow-hidden bg-[#EAE6DF] ${className}`}>
-      {showPlaceholder && (
-        variant?.blurDataUrl ? (
-          <img
-            src={variant.blurDataUrl}
-            alt=""
-            aria-hidden="true"
-            decoding="async"
-            style={style}
-            className="absolute inset-0 w-full h-full object-cover scale-110 blur-lg pointer-events-none select-none"
-          />
-        ) : (
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 bg-[#E4DFD6] animate-pulse pointer-events-none"
-          />
-        )
-      )}
+      {renderPlaceholder()}
 
       {variant ? (
         <picture className="block w-full h-full">
-          <source type="image/webp" srcSet={webpSrcSet} sizes={resolvedSizes} />
+          {mobileVariant ? (
+            <>
+              {avifSrcSet && (
+                <source
+                  media="(min-width: 768px)"
+                  type="image/avif"
+                  srcSet={avifSrcSet}
+                  sizes={resolvedSizes}
+                />
+              )}
+              <source
+                media="(min-width: 768px)"
+                type="image/webp"
+                srcSet={webpSrcSet}
+                sizes={resolvedSizes}
+              />
+              {mobileAvifSrcSet && (
+                <source
+                  type="image/avif"
+                  srcSet={mobileAvifSrcSet}
+                  sizes={resolvedSizes}
+                />
+              )}
+              <source
+                type="image/webp"
+                srcSet={mobileWebpSrcSet}
+                sizes={resolvedSizes}
+              />
+            </>
+          ) : (
+            <>
+              {avifSrcSet && (
+                <source type="image/avif" srcSet={avifSrcSet} sizes={resolvedSizes} />
+              )}
+              <source type="image/webp" srcSet={webpSrcSet} sizes={resolvedSizes} />
+            </>
+          )}
           <img
             ref={imgRef}
             src={variant.fallbackSrc}
             alt={alt}
             width={variant.width}
             height={variant.height}
-            loading={priority ? 'eager' : 'lazy'}
+            loading={priority || eager ? 'eager' : 'lazy'}
             decoding={priority ? 'sync' : 'async'}
             fetchPriority={priority ? 'high' : 'auto'}
             referrerPolicy={referrerPolicy}
             onLoad={handleLoad}
             onError={handleError}
             style={style}
-            className={`${imgClassName} transition-[opacity,filter,transform] duration-300 ease-out motion-reduce:transition-none ${
-              loaded ? 'opacity-100 blur-0' : 'opacity-0 blur-sm scale-[1.02]'
-            }`}
+            className={imgClasses}
           />
         </picture>
       ) : (
@@ -118,16 +185,14 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
           ref={imgRef}
           src={src}
           alt={alt}
-          loading={priority ? 'eager' : 'lazy'}
+          loading={priority || eager ? 'eager' : 'lazy'}
           decoding={priority ? 'sync' : 'async'}
           fetchPriority={priority ? 'high' : 'auto'}
           referrerPolicy={referrerPolicy}
           onLoad={handleLoad}
           onError={handleError}
           style={style}
-          className={`${imgClassName} transition-[opacity,filter,transform] duration-300 ease-out motion-reduce:transition-none ${
-            loaded ? 'opacity-100 blur-0' : 'opacity-0 blur-sm scale-[1.02]'
-          }`}
+          className={imgClasses}
         />
       )}
     </div>

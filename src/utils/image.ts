@@ -10,6 +10,24 @@ const SIZES_MAP: Record<ResponsiveSizesPreset, string> = {
   thumb: '96px',
 };
 
+const OPTIMIZED_URL_INDEX: Record<string, ImageAssetVariant> = (() => {
+  const index: Record<string, ImageAssetVariant> = {};
+  for (const [key, variant] of Object.entries(IMAGE_VARIANTS)) {
+    index[key] = variant;
+    index[variant.webpSrc] = variant;
+    index[variant.fallbackSrc] = variant;
+    for (const v of variant.variants) {
+      index[v.url] = variant;
+    }
+    if (variant.avifVariants) {
+      for (const v of variant.avifVariants) {
+        index[v.url] = variant;
+      }
+    }
+  }
+  return index;
+})();
+
 export function normalizeImageKey(src: string | undefined): string {
   if (!src) return '';
   const withoutHash = src.split('#')[0];
@@ -28,7 +46,7 @@ export function normalizeImageKey(src: string | undefined): string {
 export function getImageVariant(src: string | undefined): ImageAssetVariant | null {
   if (!src || shouldBypassProgressiveBlur(src)) return null;
   const key = normalizeImageKey(src);
-  return IMAGE_VARIANTS[key] || null;
+  return OPTIMIZED_URL_INDEX[key] || null;
 }
 
 export function buildSrcSet(variants: ImageWidthVariant[]): string {
@@ -45,6 +63,12 @@ export function resolveResponsiveSizes(sizes?: ResponsiveSizesPreset | string): 
     return SIZES_MAP[sizes as ResponsiveSizesPreset];
   }
   return sizes;
+}
+
+export function getOptimizedFallbackUrl(src: string | undefined): string {
+  if (!src) return '';
+  const variant = getImageVariant(src);
+  return variant ? variant.fallbackSrc : src;
 }
 
 export function shouldBypassProgressiveBlur(src: string | undefined): boolean {
