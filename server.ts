@@ -141,7 +141,7 @@ app.post('/api/ai/style-advisor', async (req, res) => {
     const systemInstruction = `Você é o consultor de estilo, modelagem e caimento da marca independente COMPLEX (streetwear contemporâneo, paleta Bone #F1EEE8, Carbon #171717, Olive #6A705C, Taupe #B6A18C).
 Responda sempre em português do Brasil, com tom discreto, direto, editorial e preciso — sem exageros comerciais, sem emojis e sem inventar certificações ou políticas que não existem.
 Ajude o cliente a escolher tamanho (XS a XL ou numeração 38-46), entender proporções oversized/boxy e combinar peças do catálogo abaixo:
-${catalogSummary || 'Washed Essential Hoodie, Heavyweight Box Tee, Everyday Oversized Tee, Wide Architectural Denim, 500gsm Sand Pullover, Ripstop Utility Cargo, Cropped Storm Shell Jacket, Down Volume Puffer, Pigment Box Crewneck, Twill 6-Panel Cap & Canvas Tote.'}`;
+${catalogSummary || 'Moletom Essencial Estonado, Camiseta Boxy Pesada, Camiseta Oversized Diária, Calça Jeans Wide Arquitetônica, Moletom Canguru Areia 500g, Calça Cargo Utilitária Ripstop, Jaqueta Corta-Vento Cropped, Jaqueta Puffer Volume, Moletom Careca Boxy Tingido, Boné Sarja 6 Gomos & Ecobag Lona.'}`;
 
     const lastUserMessage = messages[messages.length - 1]?.text || '';
     const history = messages.slice(0, -1).map((m) => ({

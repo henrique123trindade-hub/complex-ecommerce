@@ -67,7 +67,9 @@ const StorefrontRouter: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-[#F1EEE8] text-[#171717]">
       {!isAdminRoute && <Header currentPath={pathname} onNavigate={navigate} />}
 
-      <div className="flex-1">{renderPage()}</div>
+      <div key={pathname || '/'} className="flex-1 page-transition-enter">
+        {renderPage()}
+      </div>
 
       {!isAdminRoute && <Footer onNavigate={navigate} />}
 

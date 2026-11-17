@@ -1,5 +1,18 @@
 import type { CartItem, CatalogFilters, Product, ShippingQuote } from '../types/store';
 
+export const CATEGORY_LABELS: Record<string, string> = {
+  ALL: 'Todos',
+  Tees: 'Camisetas',
+  Hoodies: 'Moletons',
+  Bottoms: 'Calças',
+  Outerwear: 'Jaquetas',
+  Accessories: 'Acessórios',
+};
+
+export function getCategoryLabel(category: string): string {
+  return CATEGORY_LABELS[category] || category;
+}
+
 export function formatBrl(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',

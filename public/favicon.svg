@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="COMPLEX">
+  <rect width="512" height="512" fill="#171717" />
+  <path
+    fill="#FFFFFF"
+    d="M398 196H332C325 170 300 158 262 158C208 158 182 188 182 256C182 324 208 354 262 354C300 354 325 342 332 316H398C388 374 338 410 262 410C168 410 116 354 116 256C116 158 168 102 262 102C338 102 388 138 398 196Z"
+  />
+</svg>

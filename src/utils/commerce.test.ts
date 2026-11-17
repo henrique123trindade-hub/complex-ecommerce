@@ -8,6 +8,7 @@ import {
   formatBrl,
   formatCep,
   formatCpf,
+  getCategoryLabel,
   isSizeAvailable,
   validateCep,
   validateCpf,
@@ -142,4 +143,13 @@ test('filterAndSortProducts filters by category, available size, price, and sort
   });
   assert.equal(sizeM.length, 1);
   assert.equal(sizeM[0].slug, 'heavyweight-box-tee');
+});
+
+test('getCategoryLabel translates canonical category slugs into Brazilian Portuguese', () => {
+  assert.equal(getCategoryLabel('ALL'), 'Todos');
+  assert.equal(getCategoryLabel('Tees'), 'Camisetas');
+  assert.equal(getCategoryLabel('Hoodies'), 'Moletons');
+  assert.equal(getCategoryLabel('Bottoms'), 'Calças');
+  assert.equal(getCategoryLabel('Outerwear'), 'Jaquetas');
+  assert.equal(getCategoryLabel('Accessories'), 'Acessórios');
 });

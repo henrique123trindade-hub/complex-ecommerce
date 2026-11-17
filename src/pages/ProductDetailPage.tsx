@@ -8,6 +8,7 @@ import {
   calculateShippingQuotes,
   formatBrl,
   formatCep,
+  getCategoryLabel,
   getVariantStock,
   validateCep,
 } from '../utils/commerce';
@@ -114,7 +115,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ slug, onNa
       <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-4 border-b border-[#171717]/10 flex items-center justify-between gap-4 font-mono-tabular text-[11px] uppercase tracking-[0.12em] text-[#99968F]">
         <nav aria-label="Breadcrumb" className="flex items-center gap-2 truncate">
           <button type="button" onClick={() => onNavigate('/shop')} className="hover:text-[#171717] cursor-pointer">
-            Shop
+            Loja
           </button>
           <span aria-hidden="true">/</span>
           <button
@@ -122,14 +123,14 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ slug, onNa
             onClick={() => onNavigate(`/shop?category=${encodeURIComponent(product.category)}`)}
             className="hover:text-[#171717] cursor-pointer"
           >
-            {product.category}
+            {getCategoryLabel(product.category)}
           </button>
           <span aria-hidden="true">/</span>
           <span className="text-[#171717] truncate">{product.name}</span>
         </nav>
 
         <span className="hidden sm:inline shrink-0">
-          {product.isDemo ? 'ITEM DEMO' : product.collection}
+          {product.isDemo ? 'PEÇA DEMO' : product.collection}
         </span>
       </div>
 

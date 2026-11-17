@@ -4,6 +4,7 @@ import { useStore } from '../context/StoreContext';
 import { ProductCard } from '../components/ProductCard';
 import { STORE_ASSETS } from '../data/assets';
 import { OptimizedImage } from '../components/OptimizedImage';
+import { getCategoryLabel } from '../utils/commerce';
 
 interface HomePageProps {
   onNavigate: (path: string) => void;
@@ -133,7 +134,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               SELEÇÃO CURADA / 001
             </p>
             <h2 className="font-display text-2xl md:text-3xl font-bold tracking-[-0.02em]">
-              New Arrivals
+              Lançamentos
             </h2>
           </div>
 
@@ -210,7 +211,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               ARQUIVO POR CATEGORIA
             </p>
             <h2 className="font-display text-2xl md:text-3xl font-bold tracking-[-0.02em]">
-              Shop by Category
+              Explorar por Categoria
             </h2>
           </div>
         </div>
@@ -237,7 +238,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               <div className="absolute inset-x-0 bottom-0 p-4 md:p-5 flex items-end justify-between text-[#F1EEE8]">
                 <div>
                   <span className="block font-display text-lg md:text-xl font-bold tracking-tight">
-                    {cat.name}
+                    {getCategoryLabel(cat.slug)}
                   </span>
                   <span className="hidden sm:block text-xs text-[#F1EEE8]/75 mt-0.5">
                     {cat.description}
@@ -285,7 +286,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 onClick={() => onNavigate('/collections')}
                 className="inline-flex items-center gap-2 font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#F1EEE8] border-b border-[#F1EEE8]/50 pb-1 hover:border-[#F1EEE8] transition-colors cursor-pointer"
               >
-                <span>Explorar Lookbook 01</span>
+                <span>Explorar Editorial 01</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -313,7 +314,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               OUTRAS PEÇAS DA COLEÇÃO
             </p>
             <h2 className="font-display text-2xl md:text-3xl font-bold tracking-[-0.02em]">
-              More to Explore
+              Mais para Explorar
             </h2>
           </div>
 
@@ -344,7 +345,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             <div className="lg:col-span-6 space-y-2">
               <p className="font-mono-tabular text-[11px] uppercase tracking-[0.14em] text-[#99968F]">
-                DISPATCH / NEWSLETTER
+                COMUNICADOS / NEWSLETTER
               </p>
               <h2 className="font-display text-2xl md:text-3xl font-bold tracking-[-0.02em]">
                 Receba avisos de próximos lançamentos.

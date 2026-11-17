@@ -3,7 +3,7 @@ import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { ProductCard } from '../components/ProductCard';
 import type { CatalogFilters, CategorySlug } from '../types/store';
-import { filterAndSortProducts, formatBrl } from '../utils/commerce';
+import { filterAndSortProducts, formatBrl, getCategoryLabel } from '../utils/commerce';
 
 interface ShopPageProps {
   queryString: string;
@@ -106,7 +106,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({ queryString, onNavigate }) =
               COLEÇÃO 001 / CATÁLOGO
             </p>
             <h1 className="font-display text-3xl md:text-5xl font-extrabold tracking-[-0.03em]">
-              {filters.category === 'ALL' ? 'Todas as Peças' : filters.category}
+              {filters.category === 'ALL' ? 'Todas as Peças' : getCategoryLabel(filters.category)}
             </h1>
           </div>
 
@@ -129,7 +129,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({ queryString, onNavigate }) =
                     : 'bg-transparent text-[#171717]/80 border-[#171717]/15 hover:border-[#171717]'
                 }`}
               >
-                {cat === 'ALL' ? 'Todos' : cat}
+                {getCategoryLabel(cat)}
               </button>
             ))}
           </div>

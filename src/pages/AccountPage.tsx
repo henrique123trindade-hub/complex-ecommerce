@@ -3,6 +3,7 @@ import { LogOut, MapPin, Package, Plus, Trash2 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import type { BrazilianAddress, OrderRecord } from '../types/store';
 import { formatBrl, formatCep, formatCpf } from '../utils/commerce';
+import { formatFirebaseAuthError } from '../utils/authErrors';
 
 interface AccountPageProps {
   onNavigate: (path: string) => void;
@@ -67,7 +68,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
     try {
       await signInWithGoogle();
     } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Não foi possível concluir o login.');
+      const host = typeof window !== 'undefined' ? window.location.hostname : undefined;
+      setAuthError(formatFirebaseAuthError(err, host));
     }
   };
 

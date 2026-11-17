@@ -34,7 +34,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                   onClick={() => onNavigate('/collections')}
                   className="hover:underline underline-offset-4 cursor-pointer"
                 >
-                  Coleção 01 — Lookbook
+                  Coleção 01 — Editorial
                 </button>
               </li>
               <li>
@@ -102,7 +102,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           {/* Privacidade, Termos & Redes */}
           <div className="md:col-span-3 space-y-3">
             <h3 className="font-mono-tabular text-[11px] uppercase tracking-[0.14em] text-[#99968F]">
-              Legal & Social
+              Políticas & Redes
             </h3>
             <ul className="space-y-2 text-sm text-[#171717]/80">
               <li>

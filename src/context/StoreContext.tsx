@@ -164,7 +164,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       if (edSnap.exists()) {
-        setEditorial({ ...DEFAULT_EDITORIAL, ...(edSnap.data() as Partial<EditorialConfig>) });
+        const rawEd = edSnap.data() as Partial<EditorialConfig>;
+        const normalizedEd: Partial<EditorialConfig> = {
+          ...rawEd,
+          heroTitle:
+            rawEd.heroTitle === 'NEW PERSPECTIVE.' ? 'NOVA PERSPECTIVA.' : rawEd.heroTitle,
+          campaignTitle:
+            rawEd.campaignTitle === 'BUILT FOR EVERYDAY.'
+              ? 'FEITO PARA O DIA A DIA.'
+              : rawEd.campaignTitle,
+        };
+        setEditorial({ ...DEFAULT_EDITORIAL, ...normalizedEd });
       } else {
         setEditorial(DEFAULT_EDITORIAL);
       }

@@ -13,36 +13,36 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ onNavigate }) 
 
   const looks = [
     {
-      index: 'LOOK 01',
+      index: 'PRODUÇÃO 01',
       title: 'Concreto & Peso Bruto',
-      description: 'Sobreposição de malha heavyweight estonada e calça ampla com recorte arquitetônico.',
+      description: 'Sobreposição de malha encorpada estonada e calça ampla com recorte arquitetônico.',
       image: STORE_ASSETS.heroDesktop.url,
       productSlug: products[0]?.slug || 'washed-essential-hoodie',
-      productLabel: 'Ver Washed Essential Hoodie',
+      productLabel: 'Ver Moletom Essencial Estonado',
     },
     {
-      index: 'LOOK 02',
+      index: 'PRODUÇÃO 02',
       title: 'Silhueta Urbana Diurna',
-      description: 'Camiseta boxy de ombro deslocado combinada ao volume amplo do denim lavado.',
+      description: 'Camiseta boxy de ombro deslocado combinada ao volume amplo do jeans lavado.',
       image: STORE_ASSETS.editorialUrban.url,
       productSlug: 'heavyweight-box-tee',
-      productLabel: 'Ver Heavyweight Box Tee',
+      productLabel: 'Ver Camiseta Boxy Pesada',
     },
     {
-      index: 'LOOK 03',
+      index: 'PRODUÇÃO 03',
       title: 'Estudo de Volume em Estúdio',
-      description: 'Capuz estruturado sem cordão e tingimento mineral em cinza lavado.',
+      description: 'Capuz estruturado sem cordão e tingimento mineral em cinza estonado.',
       image: STORE_ASSETS.editorialStudioHoodie.url,
       productSlug: 'wide-architectural-denim',
-      productLabel: 'Ver Wide Architectural Denim',
+      productLabel: 'Ver Calça Jeans Wide Arquitetônica',
     },
     {
-      index: 'LOOK 04',
+      index: 'PRODUÇÃO 04',
       title: 'Série Noturna Utilitária',
-      description: 'Outerwear fosco em poliamida técnica e calça cargo ripstop em oliva.',
+      description: 'Jaqueta fosca em poliamida técnica e calça cargo ripstop em oliva.',
       image: STORE_ASSETS.campaignNight.url,
       productSlug: 'cropped-storm-shell-jacket',
-      productLabel: 'Ver Cropped Storm Shell Jacket',
+      productLabel: 'Ver Jaqueta Corta-Vento Cropped',
     },
   ];
 
@@ -53,7 +53,7 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ onNavigate }) 
           ARQUIVO EDITORIAL / 2026
         </p>
         <h1 className="font-display text-4xl md:text-6xl font-extrabold tracking-[-0.03em] leading-[0.95]">
-          Coleção 01 — Lookbook
+          Coleção 01 — Editorial
         </h1>
         <p className="mt-4 text-[15px] text-[#171717]/75 max-w-xl">
           Um estudo sobre proporções cotidianas em algodão encorpado, sarja estruturada e paleta mineral neutra.

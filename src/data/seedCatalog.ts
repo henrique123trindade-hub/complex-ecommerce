@@ -4,7 +4,7 @@ import { STORE_ASSETS } from './assets';
 export const DEFAULT_EDITORIAL: EditorialConfig = {
   id: 'homepage',
   announcementText: 'COMPLEX / COLEÇÃO 01 — STREETWEAR INDEPENDENTE',
-  heroTitle: 'NEW PERSPECTIVE.',
+  heroTitle: 'NOVA PERSPECTIVA.',
   heroSubtitle: 'COMPLEX — Coleção 01',
   heroCta: 'Explorar coleção',
   heroDesktopImage: STORE_ASSETS.heroDesktop.url,
@@ -13,7 +13,7 @@ export const DEFAULT_EDITORIAL: EditorialConfig = {
   brandTitle: 'UM NOVO PONTO DE VISTA SOBRE O UNIFORME DIÁRIO.',
   brandCopy:
     'Silhuetas estudadas, tons terrosos neutros e peças desenhadas em proporção oversized para acompanhar o ritmo urbano.',
-  campaignTitle: 'BUILT FOR EVERYDAY.',
+  campaignTitle: 'FEITO PARA O DIA A DIA.',
   campaignCopy: 'Essenciais contemporâneos. Novas proporções. Uma identidade própria.',
   campaignCta: 'Conheça a COMPLEX',
   campaignImage: STORE_ASSETS.editorialUrban.url,
@@ -32,7 +32,7 @@ export const DEFAULT_EDITORIAL: EditorialConfig = {
 export const DEMO_CATEGORIES: CategoryItem[] = [
   {
     id: 'cat-tees',
-    name: 'Tees',
+    name: 'Camisetas',
     slug: 'Tees',
     description: 'Camisetas boxy em algodão encorpado.',
     image: STORE_ASSETS.boxyTeeFront.url,
@@ -40,7 +40,7 @@ export const DEMO_CATEGORIES: CategoryItem[] = [
   },
   {
     id: 'cat-hoodies',
-    name: 'Hoodies',
+    name: 'Moletons',
     slug: 'Hoodies',
     description: 'Moletons oversized estruturados sem cordão.',
     image: STORE_ASSETS.editorialStudioHoodie.url,
@@ -48,15 +48,15 @@ export const DEMO_CATEGORIES: CategoryItem[] = [
   },
   {
     id: 'cat-bottoms',
-    name: 'Bottoms',
+    name: 'Calças',
     slug: 'Bottoms',
-    description: 'Calças cargo e denims de modelagem ampla.',
+    description: 'Calças cargo e jeans de modelagem ampla.',
     image: STORE_ASSETS.denimWide.url,
     orderIndex: 3,
   },
   {
     id: 'cat-outerwear',
-    name: 'Outerwear',
+    name: 'Jaquetas',
     slug: 'Outerwear',
     description: 'Jaquetas técnicas e puffers volumosas.',
     image: STORE_ASSETS.editorialOuterwear.url,
@@ -64,7 +64,7 @@ export const DEMO_CATEGORIES: CategoryItem[] = [
   },
   {
     id: 'cat-accessories',
-    name: 'Accessories',
+    name: 'Acessórios',
     slug: 'Accessories',
     description: 'Bonés de sarja e bolsas estruturadas em lona.',
     image: STORE_ASSETS.accessoriesCapTote.url,
@@ -86,13 +86,13 @@ export const DEMO_PRODUCTS: Product[] = [
   {
     id: 'prod-washed-essential-hoodie',
     slug: 'washed-essential-hoodie',
-    name: 'Washed Essential Hoodie',
+    name: 'Moletom Essencial Estonado',
     category: 'Hoodies',
     collection: 'Coleção 001 / Essenciais',
     priceBrl: 329,
     description:
       'Moletom oversized em algodão felpado de alta gramatura com lavagem mineral estonada. Capuz estruturado de camada dupla, ombros deslocados e bolso canguru com travete reforçado. Produto demonstrativo.',
-    composition: '100% Algodão heavyweight 500g/m² (especificação demonstrativa).',
+    composition: '100% Algodão encorpado 500g/m² (especificação demonstrativa).',
     careInstructions: 'Lavar à mão ou em ciclo delicado a frio. Secar à sombra. Não usar alvejante.',
     fitNotes: 'Modelagem boxy oversized. Escolha seu tamanho habitual para caimento amplo.',
     isNew: true,
@@ -107,7 +107,7 @@ export const DEMO_PRODUCTS: Product[] = [
     ],
     colors: [
       {
-        name: 'Washed Grey',
+        name: 'Cinza Estonado',
         hex: '#696864',
         images: [
           STORE_ASSETS.editorialStudioHoodie.url,
@@ -116,7 +116,7 @@ export const DEMO_PRODUCTS: Product[] = [
         ],
       },
       {
-        name: 'Washed Taupe',
+        name: 'Taupe Estonado',
         hex: '#B6A18C',
         images: [
           STORE_ASSETS.hoodieTaupe.url,
@@ -143,7 +143,7 @@ export const DEMO_PRODUCTS: Product[] = [
   {
     id: 'prod-heavyweight-box-tee',
     slug: 'heavyweight-box-tee',
-    name: 'Heavyweight Box Tee',
+    name: 'Camiseta Boxy Pesada',
     category: 'Tees',
     collection: 'Coleção 001 / Essenciais',
     priceBrl: 189,
@@ -151,7 +151,7 @@ export const DEMO_PRODUCTS: Product[] = [
       'Camiseta boxy em malha encorpada de algodão penteado com gola canelada alta de 3 cm e ombros caídos. Lavagem vintage estonada sem estampas. Produto demonstrativo.',
     composition: '100% Algodão penteado 310g/m² (especificação demonstrativa).',
     careInstructions: 'Lavar do avesso em água fria. Não secar em tambor.',
-    fitNotes: 'Comprimento levemente encurtado (cropped boxy) com mangas amplas até o cotovelo.',
+    fitNotes: 'Comprimento levemente encurtado (boxy) com mangas amplas até o cotovelo.',
     isNew: true,
     isFeatured: true,
     isDemo: true,
@@ -164,7 +164,7 @@ export const DEMO_PRODUCTS: Product[] = [
     ],
     colors: [
       {
-        name: 'Vintage Black',
+        name: 'Preto Estonado',
         hex: '#262626',
         images: [
           STORE_ASSETS.boxyTeeFront.url,
@@ -174,7 +174,7 @@ export const DEMO_PRODUCTS: Product[] = [
         ],
       },
       {
-        name: 'Warm Bone',
+        name: 'Bone Natural',
         hex: '#EAE4D7',
         images: [
           STORE_ASSETS.boneTeeFront.url,
@@ -200,12 +200,12 @@ export const DEMO_PRODUCTS: Product[] = [
   {
     id: 'prod-everyday-oversized-tee',
     slug: 'everyday-oversized-tee',
-    name: 'Everyday Oversized Tee',
+    name: 'Camiseta Oversized Diária',
     category: 'Tees',
     collection: 'Coleção 001 / Estúdio',
     priceBrl: 219,
     description:
-      'Camiseta de caimento amplo contínuo em tom Warm Bone natural ou Charcoal lavado. Costura dupla na barra e ribana firme que mantém a estrutura no uso diário. Produto demonstrativo.',
+      'Camiseta de caimento amplo contínuo em tom Bone natural ou Carvão lavado. Costura dupla na barra e ribana firme que mantém a estrutura no uso diário. Produto demonstrativo.',
     composition: '100% Algodão orgânico encorpado 290g/m² (especificação demonstrativa).',
     careInstructions: 'Lavar à máquina a 30°C com cores similares.',
     fitNotes: 'Caimento reto oversized com maior comprimento de tronco.',
@@ -221,12 +221,12 @@ export const DEMO_PRODUCTS: Product[] = [
     ],
     colors: [
       {
-        name: 'Warm Bone',
+        name: 'Bone Natural',
         hex: '#EDE8DC',
         images: [STORE_ASSETS.boneTeeFront.url, STORE_ASSETS.detailCotton.url],
       },
       {
-        name: 'Charcoal',
+        name: 'Carvão Lavado',
         hex: '#2E2E2E',
         images: [STORE_ASSETS.boxyTeeFront.url, STORE_ASSETS.boxyTeeBack.url],
       },
@@ -249,13 +249,13 @@ export const DEMO_PRODUCTS: Product[] = [
   {
     id: 'prod-wide-architectural-denim',
     slug: 'wide-architectural-denim',
-    name: 'Wide Architectural Denim',
+    name: 'Calça Jeans Wide Arquitetônica',
     category: 'Bottoms',
     collection: 'Coleção 001 / Volume',
     priceBrl: 449,
     description:
-      'Calça jeans wide-leg em sarja pesada preta com recortes diagonais estruturais nos joelhos, lavagem estonada artesanal e barra ampla reta. Produto demonstrativo.',
-    composition: '100% Algodão Denim 14oz (especificação demonstrativa).',
+      'Calça jeans ampla em sarja pesada preta com recortes diagonais estruturais nos joelhos, lavagem estonada artesanal e barra reta larga. Produto demonstrativo.',
+    composition: '100% Algodão Jeans 14oz (especificação demonstrativa).',
     careInstructions: 'Lavar raramente em água fria do avesso. Secar naturalmente.',
     fitNotes: 'Cintura média, gancho confortável e perna reta extremamente ampla.',
     isNew: true,
@@ -269,7 +269,7 @@ export const DEMO_PRODUCTS: Product[] = [
     ],
     colors: [
       {
-        name: 'Washed Charcoal',
+        name: 'Carvão Estonado',
         hex: '#313234',
         images: [STORE_ASSETS.denimWide.url, STORE_ASSETS.editorialStudioHoodie.url],
       },
@@ -292,12 +292,12 @@ export const DEMO_PRODUCTS: Product[] = [
   {
     id: 'prod-500gsm-sand-pullover',
     slug: 'sand-pullover-hoodie',
-    name: '500gsm Sand Pullover',
+    name: 'Moletom Canguru Areia 500g',
     category: 'Hoodies',
     collection: 'Coleção 001 / Essenciais',
     priceBrl: 349,
     description:
-      'Pullover em tonalidade Washed Taupe com tingimento reativo suave, capuz sem cordão e punhos em ribana densa 2x2. Produto demonstrativo.',
+      'Moletom canguru em tonalidade Taupe estonado com tingimento reativo suave, capuz estruturado sem cordão e punhos em ribana densa 2x2. Produto demonstrativo.',
     composition: '100% Algodão 500g/m² não peluciado interno (especificação demonstrativa).',
     careInstructions: 'Lavar com água fria. Passar em temperatura baixa.',
     fitNotes: 'Ombro caído pronunciado e barra levemente ajustada.',
@@ -312,12 +312,12 @@ export const DEMO_PRODUCTS: Product[] = [
     ],
     colors: [
       {
-        name: 'Washed Taupe',
+        name: 'Taupe Estonado',
         hex: '#B6A18C',
         images: [STORE_ASSETS.hoodieTaupe.url, STORE_ASSETS.heroDesktop.url],
       },
       {
-        name: 'Washed Charcoal',
+        name: 'Carvão Estonado',
         hex: '#3A3A3A',
         images: [STORE_ASSETS.hoodieCharcoal.url, STORE_ASSETS.detailCotton.url],
       },
@@ -340,7 +340,7 @@ export const DEMO_PRODUCTS: Product[] = [
   {
     id: 'prod-ripstop-utility-cargo',
     slug: 'ripstop-utility-cargo',
-    name: 'Ripstop Utility Cargo',
+    name: 'Calça Cargo Utilitária Ripstop',
     category: 'Bottoms',
     collection: 'Coleção 001 / Utilitário',
     priceBrl: 419,
@@ -348,7 +348,7 @@ export const DEMO_PRODUCTS: Product[] = [
       'Calça cargo ampla em ripstop de algodão oliva lavado. Pences articuladas nos joelhos, bolsos laterais minimalistas e ajustador elástico na barra. Produto demonstrativo.',
     composition: '100% Algodão Ripstop 310g/m² (especificação demonstrativa).',
     careInstructions: 'Lavar a frio com zíperes fechados. Secar pendurada.',
-    fitNotes: 'Silhueta wide-leg ajustável na barra para uso reto ou afunilado.',
+    fitNotes: 'Silhueta ampla ajustável na barra para uso reto ou afunilado.',
     isNew: false,
     isFeatured: true,
     isDemo: true,
@@ -360,7 +360,7 @@ export const DEMO_PRODUCTS: Product[] = [
     ],
     colors: [
       {
-        name: 'Muted Olive',
+        name: 'Oliva Fosco',
         hex: '#6A705C',
         images: [STORE_ASSETS.cargoOlive.url, STORE_ASSETS.editorialOuterwear.url],
       },
@@ -381,7 +381,7 @@ export const DEMO_PRODUCTS: Product[] = [
   {
     id: 'prod-cropped-storm-shell',
     slug: 'cropped-storm-shell-jacket',
-    name: 'Cropped Storm Shell Jacket',
+    name: 'Jaqueta Corta-Vento Cropped',
     category: 'Outerwear',
     collection: 'Coleção 001 / Técnica',
     priceBrl: 689,
@@ -389,7 +389,7 @@ export const DEMO_PRODUCTS: Product[] = [
       'Jaqueta utilitária de corte levemente encurtado em tecido técnico fosco carbono. Gola alta protetora, vista frontal oculta com zíper bidirecional e punhos ajustáveis. Produto demonstrativo.',
     composition: '65% Poliamida / 35% Algodão acabamento fosco (especificação demonstrativa).',
     careInstructions: 'Limpeza suave com pano úmido ou ciclo delicado a frio.',
-    fitNotes: 'Modelagem boxy estruturada para sobreposição sobre hoodies pesados.',
+    fitNotes: 'Modelagem boxy estruturada para sobreposição sobre moletons pesados.',
     isNew: true,
     isFeatured: true,
     isDemo: true,
@@ -401,7 +401,7 @@ export const DEMO_PRODUCTS: Product[] = [
     ],
     colors: [
       {
-        name: 'Carbon Black',
+        name: 'Preto Carbono',
         hex: '#171717',
         images: [STORE_ASSETS.jacketShell.url, STORE_ASSETS.campaignNight.url],
       },
@@ -422,15 +422,15 @@ export const DEMO_PRODUCTS: Product[] = [
   {
     id: 'prod-down-volume-puffer',
     slug: 'down-volume-puffer',
-    name: 'Down Volume Puffer',
+    name: 'Jaqueta Puffer Volume',
     category: 'Outerwear',
     collection: 'Coleção 001 / Inverno',
     priceBrl: 849,
     description:
-      'Puffer de volume arquitetônico em Muted Olive com gola envolvente estruturada, ombros amplos e acabamento fosco lavado. Produto demonstrativo.',
+      'Jaqueta puffer de volume arquitetônico em oliva fosco com gola envolvente estruturada, ombros amplos e acabamento fosco lavado. Produto demonstrativo.',
     composition: 'Externo 100% Poliamida fosca / Enchimento fibra térmica reciclada (especificação demonstrativa).',
     careInstructions: 'Lavagem profissional recomendada.',
-    fitNotes: 'Volume acentuado com barra ajustada.',
+    fitNotes: 'Volume acentuado nos ombros com barra ajustada.',
     isNew: false,
     isFeatured: true,
     isDemo: true,
@@ -442,7 +442,7 @@ export const DEMO_PRODUCTS: Product[] = [
     ],
     colors: [
       {
-        name: 'Muted Olive',
+        name: 'Oliva Fosco',
         hex: '#6A705C',
         images: [STORE_ASSETS.editorialOuterwear.url, STORE_ASSETS.campaignNight.url],
       },
@@ -461,12 +461,12 @@ export const DEMO_PRODUCTS: Product[] = [
   {
     id: 'prod-pigment-box-crewneck',
     slug: 'pigment-box-crewneck',
-    name: 'Pigment Box Crewneck',
+    name: 'Moletom Careca Boxy Tingido',
     category: 'Hoodies',
     collection: 'Coleção 001 / Essenciais',
     priceBrl: 299,
     description:
-      'Moletom gola careca em tom Muted Olive tingido em peça. Recortes laterais em ribana, ombros deslocados e acabamento suave ao toque. Produto demonstrativo.',
+      'Moletom gola careca em tom oliva fosco tingido em peça. Recortes laterais em ribana, ombros deslocados e acabamento suave ao toque. Produto demonstrativo.',
     composition: '100% Algodão 460g/m² (especificação demonstrativa).',
     careInstructions: 'Lavar separadamente nas primeiras lavagens devido ao tingimento em peça.',
     fitNotes: 'Caimento boxy quadrado com barra canelada estruturada.',
@@ -481,12 +481,12 @@ export const DEMO_PRODUCTS: Product[] = [
     ],
     colors: [
       {
-        name: 'Muted Olive',
+        name: 'Oliva Fosco',
         hex: '#6A705C',
         images: [STORE_ASSETS.crewneckOlive.url, STORE_ASSETS.detailCotton.url],
       },
       {
-        name: 'Washed Charcoal',
+        name: 'Carvão Estonado',
         hex: '#3A3A3A',
         images: [STORE_ASSETS.hoodieCharcoal.url, STORE_ASSETS.detailCotton.url],
       },
@@ -507,12 +507,12 @@ export const DEMO_PRODUCTS: Product[] = [
   {
     id: 'prod-twill-cap-tote-set',
     slug: 'twill-cap-and-tote-set',
-    name: 'Twill 6-Panel Cap & Canvas Tote',
+    name: 'Boné Sarja 6 Gomos & Ecobag Lona',
     category: 'Accessories',
     collection: 'Coleção 001 / Objetos',
     priceBrl: 169,
     description:
-      'Conjunto utilitário composto por boné 6 painéis em sarja preta estonada com fivela metálica fosca e sacola estruturada em lona crua pesada. Produto demonstrativo.',
+      'Conjunto utilitário composto por boné 6 gomos em sarja preta estonada com fivela metálica fosca e ecobag estruturada em lona crua pesada. Produto demonstrativo.',
     composition: '100% Algodão Sarja & Lona 16oz (especificação demonstrativa).',
     careInstructions: 'Limpeza localizada com pano úmido e sabão neutro.',
     fitNotes: 'Tamanho único com regulagem traseira no boné.',
@@ -526,7 +526,7 @@ export const DEMO_PRODUCTS: Product[] = [
     ],
     colors: [
       {
-        name: 'Carbon & Bone',
+        name: 'Carbono & Cru',
         hex: '#222222',
         images: [STORE_ASSETS.accessoriesCapTote.url, STORE_ASSETS.detailCotton.url],
       },

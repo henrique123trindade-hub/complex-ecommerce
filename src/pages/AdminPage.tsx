@@ -12,6 +12,7 @@ import type {
 } from '../types/store';
 import { STORE_ASSETS } from '../data/assets';
 import { formatBrl } from '../utils/commerce';
+import { formatFirebaseAuthError } from '../utils/authErrors';
 
 interface AdminPageProps {
   onNavigate: (path: string) => void;
@@ -44,6 +45,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
   } = useStore();
 
   const [tab, setTab] = useState<AdminTab>('dashboard');
+  const [authError, setAuthError] = useState('');
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [coupons, setCoupons] = useState<CouponRecord[]>([]);
   const [customers, setCustomers] = useState<UserProfile[]>([]);
@@ -99,7 +101,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
             {!user && (
               <button
                 type="button"
-                onClick={() => void signInWithGoogle()}
+                onClick={async () => {
+                  setAuthError('');
+                  try {
+                    await signInWithGoogle();
+                  } catch (err) {
+                    const host = typeof window !== 'undefined' ? window.location.hostname : undefined;
+                    setAuthError(formatFirebaseAuthError(err, host));
+                  }
+                }}
                 className="px-5 py-2.5 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] cursor-pointer"
               >
                 Entrar com Google
@@ -113,6 +123,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
               Voltar à Loja
             </button>
           </div>
+          {authError && <p className="text-xs text-[#8A2C2C]">{authError}</p>}
         </div>
       </main>
     );
@@ -416,11 +427,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
                       }
                       className="w-full h-10 px-3 border border-[#171717]/20 bg-[#F1EEE8] text-sm"
                     >
-                      <option value="Tees">Tees</option>
-                      <option value="Hoodies">Hoodies</option>
-                      <option value="Bottoms">Bottoms</option>
-                      <option value="Outerwear">Outerwear</option>
-                      <option value="Accessories">Accessories</option>
+                      <option value="Tees">Camisetas</option>
+                      <option value="Hoodies">Moletons</option>
+                      <option value="Bottoms">Calças</option>
+                      <option value="Outerwear">Jaquetas</option>
+                      <option value="Accessories">Acessórios</option>
                     </select>
                   </div>
 

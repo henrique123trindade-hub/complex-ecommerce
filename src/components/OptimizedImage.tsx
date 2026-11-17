@@ -108,7 +108,7 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
             onLoad={handleLoad}
             onError={handleError}
             style={style}
-            className={`${imgClassName} transition-[opacity,filter,transform] duration-500 ease-out motion-reduce:transition-none ${
+            className={`${imgClassName} transition-[opacity,filter,transform] duration-300 ease-out motion-reduce:transition-none ${
               loaded ? 'opacity-100 blur-0' : 'opacity-0 blur-sm scale-[1.02]'
             }`}
           />
@@ -125,7 +125,7 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
           onLoad={handleLoad}
           onError={handleError}
           style={style}
-          className={`${imgClassName} transition-[opacity,filter,transform] duration-500 ease-out motion-reduce:transition-none ${
+          className={`${imgClassName} transition-[opacity,filter,transform] duration-300 ease-out motion-reduce:transition-none ${
             loaded ? 'opacity-100 blur-0' : 'opacity-0 blur-sm scale-[1.02]'
           }`}
         />

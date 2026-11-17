@@ -75,7 +75,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({ onNavigate }) => {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar hoodies, tees boxy, cargo, denim..."
+              placeholder="Buscar moletons, camisetas boxy, cargo, jeans..."
               className="flex-1 bg-transparent text-base md:text-lg placeholder:text-[#99968F] focus:outline-none"
             />
             <button
@@ -107,7 +107,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({ onNavigate }) => {
 
             {results.length === 0 ? (
               <p className="text-sm text-[#99968F] py-6">
-                Nenhuma peça encontrada para "{query}". Tente buscar por "Hoodie", "Boxy", "Cargo" ou "Olive".
+                Nenhuma peça encontrada para "{query}". Tente buscar por "Moletom", "Boxy", "Cargo" ou "Oliva".
               </p>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
