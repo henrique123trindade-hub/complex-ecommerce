@@ -1,0 +1,6 @@
+{
+  "name": "COMPLEX — Contemporary Streetwear",
+  "description": "COMPLEX é uma marca independente de streetwear contemporâneo com foco em proporções oversized, tecidos encorpados e estética editorial.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

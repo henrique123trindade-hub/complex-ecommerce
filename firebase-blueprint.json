@@ -1,0 +1,202 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Catalog product item for COMPLEX streetwear store.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "slug": { "type": "string", "maxLength": 128, "pattern": "^[a-z0-9-]+$" },
+        "name": { "type": "string", "maxLength": 140 },
+        "category": { "type": "string", "enum": ["Tees", "Hoodies", "Bottoms", "Outerwear", "Accessories"] },
+        "collection": { "type": "string", "maxLength": 80 },
+        "priceBrl": { "type": "number" },
+        "description": { "type": "string", "maxLength": 2000 },
+        "composition": { "type": "string", "maxLength": 400 },
+        "careInstructions": { "type": "string", "maxLength": 400 },
+        "fitNotes": { "type": "string", "maxLength": 400 },
+        "isNew": { "type": "boolean" },
+        "isFeatured": { "type": "boolean" },
+        "isDemo": { "type": "boolean" },
+        "active": { "type": "boolean" },
+        "images": { "type": "array" },
+        "colors": { "type": "array" },
+        "sizes": { "type": "array" },
+        "measurements": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "slug", "name", "category", "collection", "priceBrl", "description", "isNew", "isFeatured", "isDemo", "active", "images", "colors", "sizes", "createdAt", "updatedAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Storefront clothing category.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "name": { "type": "string", "maxLength": 60 },
+        "slug": { "type": "string", "maxLength": 64, "pattern": "^[a-z0-9-]+$" },
+        "description": { "type": "string", "maxLength": 300 },
+        "image": { "type": "string", "maxLength": 500 },
+        "orderIndex": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "slug", "image", "orderIndex", "updatedAt"]
+    },
+    "EditorialConfig": {
+      "title": "EditorialConfig",
+      "description": "Homepage editorial copy, hero imagery, and store configuration.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "announcementText": { "type": "string", "maxLength": 140 },
+        "heroTitle": { "type": "string", "maxLength": 80 },
+        "heroSubtitle": { "type": "string", "maxLength": 100 },
+        "heroCta": { "type": "string", "maxLength": 60 },
+        "heroDesktopImage": { "type": "string", "maxLength": 500 },
+        "heroMobileImage": { "type": "string", "maxLength": 500 },
+        "brandKicker": { "type": "string", "maxLength": 80 },
+        "brandTitle": { "type": "string", "maxLength": 140 },
+        "brandCopy": { "type": "string", "maxLength": 400 },
+        "campaignTitle": { "type": "string", "maxLength": 80 },
+        "campaignCopy": { "type": "string", "maxLength": 300 },
+        "campaignCta": { "type": "string", "maxLength": 60 },
+        "campaignImage": { "type": "string", "maxLength": 500 },
+        "storyKicker": { "type": "string", "maxLength": 80 },
+        "storyTitle": { "type": "string", "maxLength": 120 },
+        "storyCopy": { "type": "string", "maxLength": 600 },
+        "storyImage": { "type": "string", "maxLength": 500 },
+        "storyDetailImage": { "type": "string", "maxLength": 500 },
+        "contactEmail": { "type": "string", "maxLength": 140 },
+        "instagramHandle": { "type": "string", "maxLength": 80 },
+        "shippingNote": { "type": "string", "maxLength": 300 },
+        "returnsNote": { "type": "string", "maxLength": 300 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "heroTitle", "heroSubtitle", "heroCta", "campaignTitle", "campaignCopy", "storyTitle", "storyCopy", "updatedAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private customer profile isolated per user UID.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "maxLength": 160 },
+        "cpf": { "type": "string", "maxLength": 20 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    },
+    "UserAddress": {
+      "title": "UserAddress",
+      "description": "Saved Brazilian shipping address for a customer.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "label": { "type": "string", "maxLength": 60 },
+        "recipientName": { "type": "string", "maxLength": 120 },
+        "cep": { "type": "string", "maxLength": 12 },
+        "street": { "type": "string", "maxLength": 160 },
+        "number": { "type": "string", "maxLength": 20 },
+        "complement": { "type": "string", "maxLength": 80 },
+        "neighborhood": { "type": "string", "maxLength": 100 },
+        "city": { "type": "string", "maxLength": 100 },
+        "state": { "type": "string", "maxLength": 4 },
+        "isDefault": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "recipientName", "cep", "street", "number", "neighborhood", "city", "state", "isDefault", "createdAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order record with demo payment state.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "orderNumber": { "type": "string", "maxLength": 32 },
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "customerName": { "type": "string", "maxLength": 120 },
+        "customerEmail": { "type": "string", "maxLength": 160 },
+        "customerCpf": { "type": "string", "maxLength": 20 },
+        "shippingAddress": { "type": "object" },
+        "shippingMethod": { "type": "string", "maxLength": 80 },
+        "shippingCostBrl": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["pix", "cartao"] },
+        "couponCode": { "type": "string", "maxLength": 40 },
+        "discountBrl": { "type": "number" },
+        "subtotalBrl": { "type": "number" },
+        "totalBrl": { "type": "number" },
+        "status": { "type": "string", "enum": ["demo_pending", "confirmed", "preparing", "shipped", "delivered", "cancelled"] },
+        "isDemo": { "type": "boolean" },
+        "items": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "orderNumber", "userId", "customerName", "customerEmail", "shippingAddress", "shippingMethod", "shippingCostBrl", "paymentMethod", "discountBrl", "subtotalBrl", "totalBrl", "status", "isDemo", "items", "createdAt", "updatedAt"]
+    },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Promotional discount coupon managed by administrators.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 32, "pattern": "^[A-Z0-9_-]+$" },
+        "discountPercent": { "type": "number" },
+        "minOrderBrl": { "type": "number" },
+        "active": { "type": "boolean" },
+        "usageCount": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "discountPercent", "minOrderBrl", "active", "usageCount", "updatedAt"]
+    },
+    "NewsletterSubscriber": {
+      "title": "NewsletterSubscriber",
+      "description": "Email subscriber with explicit consent flag.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "email": { "type": "string", "maxLength": 160 },
+        "consent": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "email", "consent", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Publicly readable catalog products; admin-only writes."
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Publicly readable catalog categories; admin-only writes."
+    },
+    "/editorial/{sectionId}": {
+      "schema": { "$ref": "#/entities/EditorialConfig" },
+      "description": "Publicly readable homepage editorial configuration; admin-only writes."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private customer profile isolated to owner or admin."
+    },
+    "/users/{userId}/addresses/{addressId}": {
+      "schema": { "$ref": "#/entities/UserAddress" },
+      "description": "Customer saved addresses isolated to owner or admin."
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer orders isolated to order owner or admin."
+    },
+    "/coupons/{couponId}": {
+      "schema": { "$ref": "#/entities/Coupon" },
+      "description": "Discount coupons: single-document lookup by code allowed, listing and writes restricted to admin."
+    },
+    "/newsletter/{subscriberId}": {
+      "schema": { "$ref": "#/entities/NewsletterSubscriber" },
+      "description": "Newsletter signups: write-only create for visitors, read/manage restricted to admin."
+    }
+  }
+}
