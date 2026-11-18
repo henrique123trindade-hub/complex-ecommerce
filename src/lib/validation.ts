@@ -1,3 +1,5 @@
+import { validateNewsletterEmail } from '../utils/newsletter';
+
 export const ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 export const SLUG_PATTERN = /^[a-z0-9-]+$/;
 
@@ -85,7 +87,7 @@ export function validateNewsletterPayload(payload: Record<string, unknown>): { v
     return { valid: false, reason: 'Invalid newsletter keys' };
   }
   if (!isValidBlueprintId(String(payload.id))) return { valid: false, reason: 'Invalid subscriber id' };
-  if (typeof payload.email !== 'string' || payload.email.length < 5 || payload.email.length > 160) {
+  if (typeof payload.email !== 'string' || validateNewsletterEmail(payload.email, { enforceRequired: true }).status !== 'valid') {
     return { valid: false, reason: 'Invalid email' };
   }
   if (payload.consent !== true) return { valid: false, reason: 'Explicit consent required' };

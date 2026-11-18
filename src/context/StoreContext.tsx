@@ -38,6 +38,7 @@ import type {
   UserProfile,
 } from '../types/store';
 import { clampQuantityForStock } from '../utils/commerce';
+import { validateNewsletterEmail } from '../utils/newsletter';
 
 const CART_STORAGE_KEY = 'complex_cart_v1';
 const DEMO_ORDERS_STORAGE_KEY = 'complex_demo_orders_v1';
@@ -815,15 +816,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const subscribeNewsletter = useCallback(
     async (email: string, consent: boolean) => {
+      const check = validateNewsletterEmail(email, { enforceRequired: true });
+      if (check.status !== 'valid') {
+        throw new Error(check.message || 'Informe um e-mail válido.');
+      }
       if (!consent) throw new Error('Confirme o consentimento para recebimento de novidades.');
-      const trimmed = email.trim().toLowerCase();
-      if (!trimmed || !trimmed.includes('@')) throw new Error('Informe um e-mail válido.');
       const id = `sub-${Date.now()}`;
       const path = `newsletter/${id}`;
       try {
         await setDoc(doc(db, 'newsletter', id), {
           id,
-          email: trimmed,
+          email: check.normalized,
           consent: true,
           createdAt: serverTimestamp(),
         });

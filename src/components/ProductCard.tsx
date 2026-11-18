@@ -17,17 +17,24 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   eager = false,
 }) => {
   const [hovered, setHovered] = useState(false);
+  const [preloadSecondary, setPreloadSecondary] = useState(false);
   const [imgError, setImgError] = useState(false);
 
   const primaryImage = product.images[0];
   const secondaryImage = product.images[1] || product.images[0];
   const totalStock = product.sizes.reduce((sum, s) => sum + s.stock, 0);
 
+  const activateHover = () => {
+    setPreloadSecondary(true);
+    setHovered(true);
+  };
+
   return (
     <article
       className="group flex flex-col"
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={activateHover}
       onMouseLeave={() => setHovered(false)}
+      onFocus={() => setPreloadSecondary(true)}
     >
       <button
         type="button"
@@ -51,11 +58,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               }`}
               imgClassName="w-full h-full object-cover object-[50%_18%]"
             />
-            {secondaryImage !== primaryImage && (
+            {secondaryImage !== primaryImage && preloadSecondary && (
               <OptimizedImage
                 src={secondaryImage}
                 alt={`${product.name} — ângulo alternativo`}
                 sizes="card"
+                eager
                 disablePlaceholder
                 className={`hidden md:block absolute inset-0 w-full h-full product-hover-zoom ${
                   hovered

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { ProductCard } from '../components/ProductCard';
@@ -11,12 +11,7 @@ interface HomePageProps {
 }
 
 export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
-  const { products, categories, editorial, subscribeNewsletter } = useStore();
-
-  const [newsletterEmail, setNewsletterEmail] = useState('');
-  const [newsletterConsent, setNewsletterConsent] = useState(false);
-  const [newsletterState, setNewsletterState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
-  const [newsletterFeedback, setNewsletterFeedback] = useState('');
+  const { products, categories, editorial } = useStore();
 
   const activeProducts = products.filter((p) => p.active);
   const newArrivals = activeProducts.filter((p) => p.isNew).slice(0, 4);
@@ -27,25 +22,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const primaryCategories = categories
     .filter((c) => ['tees', 'hoodies', 'bottoms', 'outerwear'].includes(c.slug.toLowerCase()))
     .slice(0, 4);
-
-  const handleNewsletterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setNewsletterState('submitting');
-    setNewsletterFeedback('');
-
-    try {
-      await subscribeNewsletter(newsletterEmail, newsletterConsent);
-      setNewsletterState('success');
-      setNewsletterFeedback('Cadastro confirmado. Você receberá apenas lançamentos e comunicados da COMPLEX.');
-      setNewsletterEmail('');
-      setNewsletterConsent(false);
-    } catch (err) {
-      setNewsletterState('error');
-      setNewsletterFeedback(
-        err instanceof Error ? err.message : 'Não foi possível concluir o cadastro.'
-      );
-    }
-  };
 
   return (
     <main className="bg-[#F1EEE8] text-[#171717]">
@@ -327,71 +303,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               onSelect={(slug) => onNavigate(`/product/${slug}`)}
             />
           ))}
-        </div>
-      </section>
-
-      {/* H. NEWSLETTER */}
-      <section className="border-t border-[#171717]/15 bg-[#EAE6DF]/55">
-        <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-14 md:py-16">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-            <div className="lg:col-span-6 space-y-2">
-              <p className="font-mono-tabular text-[11px] uppercase tracking-[0.14em] text-[#99968F]">
-                COMUNICADOS / NEWSLETTER
-              </p>
-              <h2 className="font-display text-2xl md:text-3xl font-bold tracking-[-0.02em]">
-                Receba avisos de próximos lançamentos.
-              </h2>
-              <p className="text-sm text-[#171717]/75 max-w-md">
-                Apenas notificações sobre novas coleções e reposições. Sem spam ou envios automáticos frequentes.
-              </p>
-            </div>
-
-            <form onSubmit={handleNewsletterSubmit} className="lg:col-span-6 space-y-3">
-              <div className="flex flex-col sm:flex-row gap-2">
-                <label htmlFor="newsletter-email" className="sr-only">
-                  Seu endereço de e-mail
-                </label>
-                <input
-                  id="newsletter-email"
-                  type="email"
-                  required
-                  value={newsletterEmail}
-                  onChange={(e) => setNewsletterEmail(e.target.value)}
-                  placeholder="seu@email.com"
-                  className="flex-1 h-11 px-4 bg-[#F1EEE8] border border-[#171717]/25 text-sm placeholder:text-[#99968F] focus:outline-none focus:border-[#171717]"
-                />
-                <button
-                  type="submit"
-                  disabled={newsletterState === 'submitting'}
-                  className="h-11 px-6 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] hover:bg-[#171717]/90 disabled:opacity-50 transition-colors shrink-0 cursor-pointer"
-                >
-                  {newsletterState === 'submitting' ? 'Enviando...' : 'Inscrever-se'}
-                </button>
-              </div>
-
-              <label className="flex items-start gap-2.5 text-xs text-[#171717]/75 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={newsletterConsent}
-                  onChange={(e) => setNewsletterConsent(e.target.checked)}
-                  className="mt-0.5 accent-[#171717]"
-                />
-                <span>
-                  Concordo em receber comunicações da COMPLEX e com o tratamento de dados conforme a política de privacidade.
-                </span>
-              </label>
-
-              {newsletterFeedback && (
-                <p
-                  className={`text-xs ${
-                    newsletterState === 'error' ? 'text-[#8A2C2C]' : 'text-[#6A705C]'
-                  }`}
-                >
-                  {newsletterFeedback}
-                </p>
-              )}
-            </form>
-          </div>
         </div>
       </section>
     </main>

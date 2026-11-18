@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { IMAGE_VARIANTS } from '../data/imageVariants';
 import {
   buildSrcSet,
   getImageVariant,
@@ -72,4 +75,32 @@ test('shouldBypassProgressiveBlur skips data and blob URIs', () => {
   assert.equal(shouldBypassProgressiveBlur('data:image/png;base64,abc'), true);
   assert.equal(shouldBypassProgressiveBlur('blob:http://localhost:3000/123'), true);
   assert.equal(shouldBypassProgressiveBlur('/src/assets/images/product_hoodie_taupe_1794952251370.jpg'), false);
+});
+
+test('all assets in src/assets are converted to paired AVIF and WebP variants on disk', () => {
+  const assetsDir = path.resolve('src/assets');
+  const walk = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      return entry.isDirectory() ? walk(full) : [full];
+    });
+
+  const files = walk(assetsDir);
+  assert.ok(files.length > 0);
+  const nonOptimized = files.filter((f) => !f.endsWith('.avif') && !f.endsWith('.webp'));
+  assert.deepEqual(nonOptimized, []);
+
+  const avifs = new Set(files.filter((f) => f.endsWith('.avif')).map((f) => f.slice(0, -5)));
+  const webps = new Set(files.filter((f) => f.endsWith('.webp')).map((f) => f.slice(0, -5)));
+  assert.equal(avifs.size, webps.size);
+  for (const base of avifs) {
+    assert.ok(webps.has(base), `Missing WebP pair for ${base}`);
+  }
+
+  for (const [key, entry] of Object.entries(IMAGE_VARIANTS)) {
+    assert.ok(entry.variants.length >= 2, `Expected responsive WebP variants for ${key}`);
+    assert.ok(entry.avifVariants && entry.avifVariants.length === entry.variants.length, `Expected matching AVIF variants for ${key}`);
+    assert.ok(entry.blurDataUrl.startsWith('data:image/webp;base64,'), `Expected WebP LQIP for ${key}`);
+    assert.ok(entry.width > 0 && entry.height > 0, `Expected explicit dimensions for ${key}`);
+  }
 });

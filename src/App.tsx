@@ -15,59 +15,99 @@ import { BagPage } from './pages/BagPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { AccountPage } from './pages/AccountPage';
 import { AdminPage } from './pages/AdminPage';
+import {
+  parseNavigationTarget,
+  resolveStorefrontRoute,
+} from './utils/routing';
+
+function readCurrentLocationUrl(): string {
+  const parsed = parseNavigationTarget(
+    `${window.location.pathname}${window.location.search}${window.location.hash}`
+  );
+  return parsed.locationUrl;
+}
 
 const StorefrontRouter: React.FC = () => {
   const { toastMessage } = useStore();
-  const [locationUrl, setLocationUrl] = useState<string>(
-    () => `${window.location.pathname}${window.location.search}`
-  );
+  const [locationUrl, setLocationUrl] = useState<string>(() => readCurrentLocationUrl());
 
   useEffect(() => {
+    const parsed = parseNavigationTarget(
+      `${window.location.pathname}${window.location.search}${window.location.hash}`
+    );
+    const currentRaw = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (parsed.fullUrl !== currentRaw) {
+      window.history.replaceState({}, '', parsed.fullUrl);
+    }
+
     const onPopState = () => {
-      setLocationUrl(`${window.location.pathname}${window.location.search}`);
+      const next = parseNavigationTarget(
+        `${window.location.pathname}${window.location.search}${window.location.hash}`
+      );
+      setLocationUrl(next.locationUrl);
+      if (next.hash) {
+        window.setTimeout(() => {
+          document.getElementById(next.hash)?.scrollIntoView({ behavior: 'smooth' });
+        }, 60);
+      }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
   const navigate = useCallback((path: string) => {
-    const [rawPath, hashPart] = path.split('#');
-    window.history.pushState({}, '', path);
-    setLocationUrl(rawPath);
+    const target = parseNavigationTarget(path);
+    const currentFull = `${window.location.pathname}${window.location.search}${window.location.hash}`;
 
-    if (hashPart) {
+    if (currentFull !== target.fullUrl) {
+      window.history.pushState({}, '', target.fullUrl);
+    }
+    setLocationUrl(target.locationUrl);
+
+    if (target.hash) {
       window.setTimeout(() => {
-        document.getElementById(hashPart)?.scrollIntoView({ behavior: 'smooth' });
+        document.getElementById(target.hash)?.scrollIntoView({ behavior: 'smooth' });
       }, 60);
     } else {
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
   }, []);
 
-  const [pathname, queryString = ''] = locationUrl.split('?');
-  const isAdminRoute = pathname === '/admin';
+  const [rawPathname, queryString = ''] = locationUrl.split('?');
+  const route = resolveStorefrontRoute(rawPathname);
+  const pathname = route.pathname;
+  const isAdminRoute = route.page === 'admin';
 
   const renderPage = () => {
-    if (pathname === '/' || pathname === '') return <HomePage onNavigate={navigate} />;
-    if (pathname === '/shop') return <ShopPage queryString={queryString} onNavigate={navigate} />;
-    if (pathname === '/collections') return <CollectionsPage onNavigate={navigate} />;
-    if (pathname === '/about') return <AboutPage onNavigate={navigate} />;
-    if (pathname.startsWith('/product/')) {
-      const slug = pathname.replace('/product/', '').split('/')[0];
-      return <ProductDetailPage slug={slug} onNavigate={navigate} />;
+    switch (route.page) {
+      case 'home':
+        return <HomePage onNavigate={navigate} />;
+      case 'shop':
+        return <ShopPage queryString={queryString} onNavigate={navigate} />;
+      case 'collections':
+        return <CollectionsPage onNavigate={navigate} />;
+      case 'about':
+        return <AboutPage onNavigate={navigate} />;
+      case 'product':
+        return <ProductDetailPage slug={route.slug} onNavigate={navigate} />;
+      case 'bag':
+        return <BagPage onNavigate={navigate} />;
+      case 'checkout':
+        return <CheckoutPage onNavigate={navigate} />;
+      case 'account':
+        return <AccountPage onNavigate={navigate} />;
+      case 'admin':
+        return <AdminPage onNavigate={navigate} />;
+      default:
+        return <HomePage onNavigate={navigate} />;
     }
-    if (pathname === '/bag') return <BagPage onNavigate={navigate} />;
-    if (pathname === '/checkout') return <CheckoutPage onNavigate={navigate} />;
-    if (pathname === '/account') return <AccountPage onNavigate={navigate} />;
-    if (pathname === '/admin') return <AdminPage onNavigate={navigate} />;
-    return <HomePage onNavigate={navigate} />;
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F1EEE8] text-[#171717]">
       {!isAdminRoute && <Header currentPath={pathname} onNavigate={navigate} />}
 
-      <div key={pathname || '/'} className="flex-1 page-transition-enter">
+      <div key={pathname} className="flex-1 page-transition-enter">
         {renderPage()}
       </div>
 

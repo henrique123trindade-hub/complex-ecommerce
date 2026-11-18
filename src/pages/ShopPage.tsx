@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { ProductCard } from '../components/ProductCard';
+import { Breadcrumbs } from '../components/Breadcrumbs';
 import type { CatalogFilters, CategorySlug } from '../types/store';
 import { filterAndSortProducts, formatBrl, getCategoryLabel } from '../utils/commerce';
+import { buildShopBreadcrumbs } from '../utils/seo';
 
 interface ShopPageProps {
   queryString: string;
@@ -96,9 +98,31 @@ export const ShopPage: React.FC<ShopPageProps> = ({ queryString, onNavigate }) =
     filters.maxPrice !== null ||
     filters.query.trim() !== '';
 
+  const breadcrumbItems = useMemo(
+    () => buildShopBreadcrumbs(filters.category),
+    [filters.category]
+  );
+
+  useEffect(() => {
+    const categoryTitle =
+      filters.category === 'ALL'
+        ? 'Catálogo Completo'
+        : getCategoryLabel(filters.category);
+    document.title = `${categoryTitle} — COMPLEX Streetwear`;
+    return () => {
+      document.title = 'COMPLEX — Streetwear';
+    };
+  }, [filters.category]);
+
   return (
     <main className="bg-[#F1EEE8] text-[#171717] min-h-[75vh]">
-      <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-10 md:py-14">
+      <Breadcrumbs
+        items={breadcrumbItems}
+        onNavigate={onNavigate}
+        rightMeta="COLEÇÃO 001 / CATÁLOGO"
+      />
+
+      <div className="max-w-[1440px] mx-auto px-4 md:px-8 pt-8 pb-12 md:pt-10 md:pb-14">
         {/* Top Page Title & Count */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-8 border-b border-[#171717]/12">
           <div>

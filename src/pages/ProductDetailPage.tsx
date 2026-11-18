@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, Minus, Plus, Ruler } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { ProductCard } from '../components/ProductCard';
+import { Breadcrumbs } from '../components/Breadcrumbs';
 import { SizeGuideModal } from '../components/SizeGuideModal';
 import { OptimizedImage } from '../components/OptimizedImage';
 import {
@@ -12,6 +13,7 @@ import {
   getVariantStock,
   validateCep,
 } from '../utils/commerce';
+import { buildProductBreadcrumbs, buildProductJsonLd } from '../utils/seo';
 import type { ShippingQuote } from '../types/store';
 
 interface ProductDetailPageProps {
@@ -48,6 +50,28 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ slug, onNa
     setCepQuotes([]);
     setCepLocation('');
     setCepError('');
+  }, [product]);
+
+  useEffect(() => {
+    if (!product) return;
+    document.title = `${product.name} — COMPLEX`;
+    return () => {
+      document.title = 'COMPLEX — Streetwear';
+    };
+  }, [product]);
+
+  const breadcrumbItems = useMemo(
+    () => (product ? buildProductBreadcrumbs(product) : []),
+    [product]
+  );
+
+  const productJsonLd = useMemo(() => {
+    if (!product) return null;
+    const origin =
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : 'https://complex-ecommerce.vercel.app';
+    return buildProductJsonLd(product, origin);
   }, [product]);
 
   if (!product) {
@@ -111,28 +135,19 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ slug, onNa
 
   return (
     <main className="bg-[#F1EEE8] text-[#171717]">
-      {/* Breadcrumb Bar */}
-      <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-4 border-b border-[#171717]/10 flex items-center justify-between gap-4 font-mono-tabular text-[11px] uppercase tracking-[0.12em] text-[#99968F]">
-        <nav aria-label="Breadcrumb" className="flex items-center gap-2 truncate">
-          <button type="button" onClick={() => onNavigate('/shop')} className="hover:text-[#171717] cursor-pointer">
-            Loja
-          </button>
-          <span aria-hidden="true">/</span>
-          <button
-            type="button"
-            onClick={() => onNavigate(`/shop?category=${encodeURIComponent(product.category)}`)}
-            className="hover:text-[#171717] cursor-pointer"
-          >
-            {getCategoryLabel(product.category)}
-          </button>
-          <span aria-hidden="true">/</span>
-          <span className="text-[#171717] truncate">{product.name}</span>
-        </nav>
+      <Breadcrumbs
+        items={breadcrumbItems}
+        onNavigate={onNavigate}
+        rightMeta={product.isDemo ? 'PEÇA DEMO' : product.collection}
+      />
 
-        <span className="hidden sm:inline shrink-0">
-          {product.isDemo ? 'PEÇA DEMO' : product.collection}
-        </span>
-      </div>
+      {productJsonLd && (
+        <script
+          type="application/ld+json"
+          data-complex-jsonld="product"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
+        />
+      )}
 
       {/* Main Split Section */}
       <section className="max-w-[1440px] mx-auto px-4 md:px-8 py-8 md:py-12">
