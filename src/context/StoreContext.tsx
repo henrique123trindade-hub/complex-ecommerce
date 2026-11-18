@@ -25,7 +25,11 @@ import type {
   Product,
   UserProfile,
 } from '../types/store';
-import { clampQuantityForStock } from '../utils/commerce';
+import {
+  clampQuantityForStock,
+  validateCartAgainstCatalog,
+  type CartValidationResult,
+} from '../utils/commerce';
 import { validateNewsletterEmail } from '../utils/newsletter';
 import {
   areCatalogSnapshotsEqual,
@@ -55,7 +59,7 @@ const LEGACY_IMAGE_MAP: Record<string, string> = {
   '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_49-4_87617fd1.png':
     '/src/assets/images/optimized/complex_campaign_dusk_4_87617fd1-1672w.webp',
   '/assets/aistudio/image_2e7943ba.png': '/src/assets/images/optimized/image_2e7943ba-786w.webp',
-  '/src/assets/images/product_detail_cotton_1794952250261.jpg':
+  '/assets/images/product_detail_cotton_1794952250261.jpg':
     '/src/assets/images/optimized/product_detail_cotton_1794952250261-1200w.webp',
   '/assets/images/product_boxy_tee_front_1794952251135.jpg':
     '/src/assets/images/optimized/product_boxy_tee_front_1794952251135-896w.webp',
@@ -102,37 +106,38 @@ function getFirebaseServices() {
   return firebaseServicesPromise;
 }
 
-interface StoreContextValue {
+export interface CatalogContextValue {
   products: Product[];
   categories: CategoryItem[];
   editorial: EditorialConfig;
   catalogLoading: boolean;
   catalogSource: 'demo' | 'firestore';
-  user: User | null;
-  authReady: boolean;
-  isAdmin: boolean;
-  userProfile: UserProfile | null;
+  refreshCatalog: () => Promise<Product[]>;
+  saveProduct: (product: Product) => Promise<void>;
+  deleteProduct: (productId: string) => Promise<void>;
+  saveCategory: (category: CategoryItem) => Promise<void>;
+  saveEditorial: (editorial: EditorialConfig) => Promise<void>;
+  seedDemoCatalogToFirestore: () => Promise<void>;
+}
+
+export interface CartContextValue {
   cart: CartItem[];
   cartCount: number;
   cartSubtotal: number;
-  isBagOpen: boolean;
-  isSearchOpen: boolean;
-  isAdvisorOpen: boolean;
-  toastMessage: string | null;
-  openBag: () => void;
-  closeBag: () => void;
-  openSearch: () => void;
-  closeSearch: () => void;
-  openAdvisor: () => void;
-  closeAdvisor: () => void;
-  showToast: (msg: string) => void;
   addToCart: (product: Product, colorName: string, size: string, quantity?: number) => void;
   updateCartQuantity: (key: string, quantity: number) => void;
   removeFromCart: (key: string) => void;
   clearCart: () => void;
+  revalidateCartBeforeCheckout: () => Promise<CartValidationResult>;
+}
+
+export interface AuthContextValue {
+  user: User | null;
+  authReady: boolean;
+  isAdmin: boolean;
+  userProfile: UserProfile | null;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
-  refreshCatalog: () => Promise<void>;
   validateCoupon: (code: string) => Promise<CouponRecord | null>;
   submitOrder: (order: Omit<OrderRecord, 'createdAt' | 'updatedAt'>) => Promise<OrderRecord>;
   getDemoOrders: () => OrderRecord[];
@@ -144,18 +149,35 @@ interface StoreContextValue {
   saveAddress: (address: Omit<BrazilianAddress, 'createdAt' | 'userId'>) => Promise<void>;
   deleteAddress: (addressId: string) => Promise<void>;
   saveUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
-  saveProduct: (product: Product) => Promise<void>;
-  deleteProduct: (productId: string) => Promise<void>;
-  saveCategory: (category: CategoryItem) => Promise<void>;
-  saveEditorial: (editorial: EditorialConfig) => Promise<void>;
   saveCoupon: (coupon: CouponRecord) => Promise<void>;
   deleteCoupon: (code: string) => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
-  seedDemoCatalogToFirestore: () => Promise<void>;
   subscribeNewsletter: (email: string, consent: boolean) => Promise<void>;
 }
 
-const StoreContext = createContext<StoreContextValue | null>(null);
+export interface StoreUIContextValue {
+  isBagOpen: boolean;
+  isSearchOpen: boolean;
+  isAdvisorOpen: boolean;
+  toastMessage: string | null;
+  openBag: () => void;
+  closeBag: () => void;
+  openSearch: () => void;
+  closeSearch: () => void;
+  openAdvisor: () => void;
+  closeAdvisor: () => void;
+  showToast: (msg: string) => void;
+}
+
+export type StoreContextValue = CatalogContextValue &
+  CartContextValue &
+  AuthContextValue &
+  StoreUIContextValue;
+
+const CatalogContext = createContext<CatalogContextValue | null>(null);
+const CartContext = createContext<CartContextValue | null>(null);
+const AuthContext = createContext<AuthContextValue | null>(null);
+const StoreUIContext = createContext<StoreUIContextValue | null>(null);
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const initialSnapshot = useMemo(() => readCatalogSnapshot(), []);
@@ -182,6 +204,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
   snapshotRef.current = { products, categories, editorial, source: catalogSource };
 
+  const refreshInFlightRef = useRef<Promise<Product[]> | null>(null);
+
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
@@ -195,11 +219,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return [];
     }
   });
+  const cartRef = useRef(cart);
+  cartRef.current = cart;
 
   const [isBagOpen, setIsBagOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAdvisorOpen, setIsAdvisorOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const openBag = useCallback(() => setIsBagOpen(true), []);
+  const closeBag = useCallback(() => setIsBagOpen(false), []);
+  const openSearch = useCallback(() => setIsSearchOpen(true), []);
+  const closeSearch = useCallback(() => setIsSearchOpen(false), []);
+  const openAdvisor = useCallback(() => setIsAdvisorOpen(true), []);
+  const closeAdvisor = useCallback(() => setIsAdvisorOpen(false), []);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -216,100 +249,126 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [cart]);
 
-  const refreshCatalog = useCallback(async () => {
-    try {
-      const { collection, doc, getDoc, getDocs, orderBy, query, db } =
-        await getFirebaseServices();
-
-      const [prodSnap, catSnap, edSnap] = await Promise.all([
-        getDocs(collection(db, 'products')),
-        getDocs(query(collection(db, 'categories'), orderBy('orderIndex', 'asc'))),
-        getDoc(doc(db, 'editorial', 'homepage')),
-      ]);
-
-      const nextProducts: Product[] = !prodSnap.empty
-        ? prodSnap.docs.map((d) => {
-            const data = d.data() as Product;
-            return {
-              ...data,
-              images: Array.isArray(data.images) ? data.images.map(mapLegacyUrl) : [],
-              colors: Array.isArray(data.colors)
-                ? data.colors.map((c) => ({
-                    ...c,
-                    images: Array.isArray(c.images) ? c.images.map(mapLegacyUrl) : [],
-                  }))
-                : [],
-            };
-          })
-        : DEMO_PRODUCTS;
-
-      const nextSource: 'demo' | 'firestore' = !prodSnap.empty ? 'firestore' : 'demo';
-
-      const nextCategories: CategoryItem[] = !catSnap.empty
-        ? catSnap.docs.map((d) => {
-            const data = d.data() as CategoryItem;
-            return {
-              ...data,
-              image: data.image ? mapLegacyUrl(data.image) : data.image,
-            };
-          })
-        : DEMO_CATEGORIES;
-
-      let nextEditorial: EditorialConfig = DEFAULT_EDITORIAL;
-      if (edSnap.exists()) {
-        const rawEd = edSnap.data() as Partial<EditorialConfig>;
-        const normalizedEd: Partial<EditorialConfig> = {
-          ...rawEd,
-          heroTitle:
-            rawEd.heroTitle === 'NEW PERSPECTIVE.' ? 'NOVA PERSPECTIVA.' : rawEd.heroTitle,
-          campaignTitle:
-            rawEd.campaignTitle === 'BUILT FOR EVERYDAY.'
-              ? 'FEITO PARA O DIA A DIA.'
-              : rawEd.campaignTitle,
-          heroDesktopImage: rawEd.heroDesktopImage
-            ? mapLegacyUrl(rawEd.heroDesktopImage)
-            : DEFAULT_EDITORIAL.heroDesktopImage,
-          heroMobileImage: rawEd.heroMobileImage
-            ? mapLegacyUrl(rawEd.heroMobileImage)
-            : DEFAULT_EDITORIAL.heroMobileImage,
-          campaignImage: rawEd.campaignImage
-            ? mapLegacyUrl(rawEd.campaignImage)
-            : DEFAULT_EDITORIAL.campaignImage,
-          storyImage: rawEd.storyImage
-            ? mapLegacyUrl(rawEd.storyImage)
-            : DEFAULT_EDITORIAL.storyImage,
-        };
-        nextEditorial = { ...DEFAULT_EDITORIAL, ...normalizedEd };
-      }
-
-      const nextSnapshot = {
-        products: nextProducts,
-        categories: nextCategories,
-        editorial: nextEditorial,
-        source: nextSource,
-      };
-
-      writeCatalogSnapshot(nextSnapshot);
-
-      if (!areCatalogSnapshotsEqual(snapshotRef.current, nextSnapshot)) {
-        setProducts(nextProducts);
-        setCategories(nextCategories);
-        setEditorial(nextEditorial);
-        setCatalogSource(nextSource);
-      }
-    } catch {
-      // Keep cached or demo catalog when offline or unseeded
+  const refreshCatalog = useCallback((): Promise<Product[]> => {
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
     }
+
+    const request = (async () => {
+      try {
+        const { collection, doc, getDoc, getDocs, orderBy, query, db } =
+          await getFirebaseServices();
+
+        const [prodSnap, catSnap, edSnap] = await Promise.all([
+          getDocs(collection(db, 'products')),
+          getDocs(query(collection(db, 'categories'), orderBy('orderIndex', 'asc'))),
+          getDoc(doc(db, 'editorial', 'homepage')),
+        ]);
+
+        const nextProducts: Product[] = !prodSnap.empty
+          ? prodSnap.docs.map((d) => {
+              const data = d.data() as Product;
+              return {
+                ...data,
+                images: Array.isArray(data.images) ? data.images.map(mapLegacyUrl) : [],
+                colors: Array.isArray(data.colors)
+                  ? data.colors.map((c) => ({
+                      ...c,
+                      images: Array.isArray(c.images) ? c.images.map(mapLegacyUrl) : [],
+                    }))
+                  : [],
+              };
+            })
+          : DEMO_PRODUCTS;
+
+        const nextSource: 'demo' | 'firestore' = !prodSnap.empty ? 'firestore' : 'demo';
+
+        const nextCategories: CategoryItem[] = !catSnap.empty
+          ? catSnap.docs.map((d) => {
+              const data = d.data() as CategoryItem;
+              return {
+                ...data,
+                image: data.image ? mapLegacyUrl(data.image) : data.image,
+              };
+            })
+          : DEMO_CATEGORIES;
+
+        let nextEditorial: EditorialConfig = DEFAULT_EDITORIAL;
+        if (edSnap.exists()) {
+          const rawEd = edSnap.data() as Partial<EditorialConfig>;
+          const normalizedEd: Partial<EditorialConfig> = {
+            ...rawEd,
+            heroTitle:
+              rawEd.heroTitle === 'NEW PERSPECTIVE.' ? 'NOVA PERSPECTIVA.' : rawEd.heroTitle,
+            campaignTitle:
+              rawEd.campaignTitle === 'BUILT FOR EVERYDAY.'
+                ? 'FEITO PARA O DIA A DIA.'
+                : rawEd.campaignTitle,
+            heroDesktopImage: rawEd.heroDesktopImage
+              ? mapLegacyUrl(rawEd.heroDesktopImage)
+              : DEFAULT_EDITORIAL.heroDesktopImage,
+            heroMobileImage: rawEd.heroMobileImage
+              ? mapLegacyUrl(rawEd.heroMobileImage)
+              : DEFAULT_EDITORIAL.heroMobileImage,
+            campaignImage: rawEd.campaignImage
+              ? mapLegacyUrl(rawEd.campaignImage)
+              : DEFAULT_EDITORIAL.campaignImage,
+            storyImage: rawEd.storyImage
+              ? mapLegacyUrl(rawEd.storyImage)
+              : DEFAULT_EDITORIAL.storyImage,
+          };
+          nextEditorial = { ...DEFAULT_EDITORIAL, ...normalizedEd };
+        }
+
+        const nextSnapshot = {
+          products: nextProducts,
+          categories: nextCategories,
+          editorial: nextEditorial,
+          source: nextSource,
+        };
+
+        writeCatalogSnapshot(nextSnapshot);
+
+        if (!areCatalogSnapshotsEqual(snapshotRef.current, nextSnapshot)) {
+          setProducts(nextProducts);
+          setCategories(nextCategories);
+          setEditorial(nextEditorial);
+          setCatalogSource(nextSource);
+        }
+
+        return nextProducts;
+      } catch {
+        return snapshotRef.current.products;
+      } finally {
+        refreshInFlightRef.current = null;
+      }
+    })();
+
+    refreshInFlightRef.current = request;
+    return request;
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     let unsubAuth: (() => void) | undefined;
-    let deferredHandle: number | undefined;
+    let idleHandle: number | undefined;
+    let timeoutHandle: number | undefined;
 
     const safetyTimer = window.setTimeout(() => {
       if (!cancelled) setAuthReady(true);
-    }, 1200);
+    }, 2600);
+
+    const scheduleIdle = (cb: () => void) => {
+      const winWithIdle = window as Window & {
+        requestIdleCallback?: (fn: () => void, opts?: { timeout: number }) => number;
+        cancelIdleCallback?: (id: number) => void;
+      };
+      if (typeof winWithIdle.requestIdleCallback === 'function') {
+        idleHandle = winWithIdle.requestIdleCallback(cb, { timeout: 2500 });
+      } else {
+        timeoutHandle = window.setTimeout(cb, 500);
+      }
+    };
 
     const bootstrapFirebase = async () => {
       try {
@@ -325,8 +384,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         if (cancelled) return;
 
-        // Revalidate catalog silently without blocking first paint
-        void refreshCatalog();
+        // Yield a frame so Firebase module evaluation & onAuthStateChanged don't stack with catalog fetch into one Long Task
+        window.setTimeout(() => {
+          if (!cancelled) void refreshCatalog();
+        }, 40);
 
         unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
           window.clearTimeout(safetyTimer);
@@ -399,15 +460,48 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     };
 
-    // Defer heavy Firebase SDK load just past initial frame render
-    deferredHandle = window.requestAnimationFrame(() => {
-      void bootstrapFirebase();
-    });
+    // Wait for page load + brief interaction breathing window before idle-loading heavy Firebase SDK
+    // so first clicks & first route transitions (Home -> Shop -> Product) never stall behind Firebase JS parse.
+    let delayHandle: number | undefined;
+    let onLoadHandler: (() => void) | undefined;
+
+    const startDeferredBootstrap = () => {
+      delayHandle = window.setTimeout(() => {
+        if (!cancelled) {
+          scheduleIdle(() => {
+            if (!cancelled) void bootstrapFirebase();
+          });
+        }
+      }, 1800);
+    };
+
+    if (document.readyState === 'complete') {
+      startDeferredBootstrap();
+    } else {
+      onLoadHandler = () => {
+        startDeferredBootstrap();
+      };
+      window.addEventListener('load', onLoadHandler, { once: true });
+    }
 
     return () => {
       cancelled = true;
       window.clearTimeout(safetyTimer);
-      if (deferredHandle !== undefined) window.cancelAnimationFrame(deferredHandle);
+      if (onLoadHandler) {
+        window.removeEventListener('load', onLoadHandler);
+      }
+      if (delayHandle !== undefined) {
+        window.clearTimeout(delayHandle);
+      }
+      const winWithIdle = window as Window & {
+        cancelIdleCallback?: (id: number) => void;
+      };
+      if (idleHandle !== undefined && typeof winWithIdle.cancelIdleCallback === 'function') {
+        winWithIdle.cancelIdleCallback(idleHandle);
+      }
+      if (timeoutHandle !== undefined) {
+        window.clearTimeout(timeoutHandle);
+      }
       if (unsubAuth) unsubAuth();
     };
   }, [refreshCatalog]);
@@ -491,6 +585,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const clearCart = useCallback(() => {
     setCart([]);
   }, []);
+
+  const revalidateCartBeforeCheckout = useCallback(async (): Promise<CartValidationResult> => {
+    const latestProducts = await refreshCatalog();
+    const validation = validateCartAgainstCatalog(cartRef.current, latestProducts);
+    if (validation.changed) {
+      setCart(validation.adjustedCart);
+    }
+    return validation;
+  }, [refreshCatalog]);
 
   const validateCoupon = useCallback(async (rawCode: string): Promise<CouponRecord | null> => {
     const code = rawCode.trim().toUpperCase();
@@ -978,64 +1081,184 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [cart]
   );
 
-  const value: StoreContextValue = {
-    products,
-    categories,
-    editorial,
-    catalogLoading,
-    catalogSource,
-    user,
-    authReady,
-    isAdmin,
-    userProfile,
-    cart,
-    cartCount,
-    cartSubtotal,
-    isBagOpen,
-    isSearchOpen,
-    isAdvisorOpen,
-    toastMessage,
-    openBag: () => setIsBagOpen(true),
-    closeBag: () => setIsBagOpen(false),
-    openSearch: () => setIsSearchOpen(true),
-    closeSearch: () => setIsSearchOpen(false),
-    openAdvisor: () => setIsAdvisorOpen(true),
-    closeAdvisor: () => setIsAdvisorOpen(false),
-    showToast,
-    addToCart,
-    updateCartQuantity,
-    removeFromCart,
-    clearCart,
-    signInWithGoogle,
-    logout,
-    refreshCatalog,
-    validateCoupon,
-    submitOrder,
-    getDemoOrders,
-    fetchUserOrders,
-    fetchAllOrders,
-    fetchAllCoupons,
-    fetchAllCustomers,
-    fetchAddresses,
-    saveAddress,
-    deleteAddress,
-    saveUserProfile,
-    saveProduct,
-    deleteProduct,
-    saveCategory,
-    saveEditorial,
-    saveCoupon,
-    deleteCoupon,
-    updateOrderStatus,
-    seedDemoCatalogToFirestore,
-    subscribeNewsletter,
-  };
+  const catalogValue = useMemo<CatalogContextValue>(
+    () => ({
+      products,
+      categories,
+      editorial,
+      catalogLoading,
+      catalogSource,
+      refreshCatalog,
+      saveProduct,
+      deleteProduct,
+      saveCategory,
+      saveEditorial,
+      seedDemoCatalogToFirestore,
+    }),
+    [
+      products,
+      categories,
+      editorial,
+      catalogLoading,
+      catalogSource,
+      refreshCatalog,
+      saveProduct,
+      deleteProduct,
+      saveCategory,
+      saveEditorial,
+      seedDemoCatalogToFirestore,
+    ]
+  );
 
-  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+  const cartValue = useMemo<CartContextValue>(
+    () => ({
+      cart,
+      cartCount,
+      cartSubtotal,
+      addToCart,
+      updateCartQuantity,
+      removeFromCart,
+      clearCart,
+      revalidateCartBeforeCheckout,
+    }),
+    [
+      cart,
+      cartCount,
+      cartSubtotal,
+      addToCart,
+      updateCartQuantity,
+      removeFromCart,
+      clearCart,
+      revalidateCartBeforeCheckout,
+    ]
+  );
+
+  const authValue = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      authReady,
+      isAdmin,
+      userProfile,
+      signInWithGoogle,
+      logout,
+      validateCoupon,
+      submitOrder,
+      getDemoOrders,
+      fetchUserOrders,
+      fetchAllOrders,
+      fetchAllCoupons,
+      fetchAllCustomers,
+      fetchAddresses,
+      saveAddress,
+      deleteAddress,
+      saveUserProfile,
+      saveCoupon,
+      deleteCoupon,
+      updateOrderStatus,
+      subscribeNewsletter,
+    }),
+    [
+      user,
+      authReady,
+      isAdmin,
+      userProfile,
+      signInWithGoogle,
+      logout,
+      validateCoupon,
+      submitOrder,
+      getDemoOrders,
+      fetchUserOrders,
+      fetchAllOrders,
+      fetchAllCoupons,
+      fetchAllCustomers,
+      fetchAddresses,
+      saveAddress,
+      deleteAddress,
+      saveUserProfile,
+      saveCoupon,
+      deleteCoupon,
+      updateOrderStatus,
+      subscribeNewsletter,
+    ]
+  );
+
+  const uiValue = useMemo<StoreUIContextValue>(
+    () => ({
+      isBagOpen,
+      isSearchOpen,
+      isAdvisorOpen,
+      toastMessage,
+      openBag,
+      closeBag,
+      openSearch,
+      closeSearch,
+      openAdvisor,
+      closeAdvisor,
+      showToast,
+    }),
+    [
+      isBagOpen,
+      isSearchOpen,
+      isAdvisorOpen,
+      toastMessage,
+      openBag,
+      closeBag,
+      openSearch,
+      closeSearch,
+      openAdvisor,
+      closeAdvisor,
+      showToast,
+    ]
+  );
+
+  return (
+    <CatalogContext.Provider value={catalogValue}>
+      <CartContext.Provider value={cartValue}>
+        <AuthContext.Provider value={authValue}>
+          <StoreUIContext.Provider value={uiValue}>{children}</StoreUIContext.Provider>
+        </AuthContext.Provider>
+      </CartContext.Provider>
+    </CatalogContext.Provider>
+  );
 };
 
-export function useStore(): StoreContextValue {
-  const ctx = useContext(StoreContext);
-  if (!ctx) throw new Error('useStore must be used inside StoreProvider');
+export function useCatalog(): CatalogContextValue {
+  const ctx = useContext(CatalogContext);
+  if (!ctx) throw new Error('useCatalog must be used inside StoreProvider');
   return ctx;
+}
+
+export function useCart(): CartContextValue {
+  const ctx = useContext(CartContext);
+  if (!ctx) throw new Error('useCart must be used inside StoreProvider');
+  return ctx;
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used inside StoreProvider');
+  return ctx;
+}
+
+export function useStoreUI(): StoreUIContextValue {
+  const ctx = useContext(StoreUIContext);
+  if (!ctx) throw new Error('useStoreUI must be used inside StoreProvider');
+  return ctx;
+}
+
+export function useStore(): StoreContextValue {
+  const catalog = useCatalog();
+  const cart = useCart();
+  const auth = useAuth();
+  const ui = useStoreUI();
+
+  return useMemo(
+    () => ({
+      ...catalog,
+      ...cart,
+      ...auth,
+      ...ui,
+    }),
+    [catalog, cart, auth, ui]
+  );
 }

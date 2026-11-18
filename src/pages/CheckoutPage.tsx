@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Check, Info } from 'lucide-react';
-import { useStore } from '../context/StoreContext';
+import { useAuth, useCart, useCatalog } from '../context/StoreContext';
 import { OptimizedImage } from '../components/OptimizedImage';
 import type { BrazilianAddress, CouponRecord, OrderRecord, ShippingQuote } from '../types/store';
 import {
@@ -18,15 +18,9 @@ interface CheckoutPageProps {
 }
 
 export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
-  const {
-    cart,
-    cartSubtotal,
-    user,
-    userProfile,
-    fetchAddresses,
-    validateCoupon,
-    submitOrder,
-  } = useStore();
+  const { refreshCatalog } = useCatalog();
+  const { cart, cartSubtotal, revalidateCartBeforeCheckout } = useCart();
+  const { user, userProfile, fetchAddresses, validateCoupon, submitOrder } = useAuth();
 
   const [customerName, setCustomerName] = useState(userProfile?.displayName || user?.displayName || '');
   const [customerEmail, setCustomerEmail] = useState(userProfile?.email || user?.email || '');
@@ -60,6 +54,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
       if (!customerCpf && userProfile.cpf) setCustomerCpf(userProfile.cpf);
     }
   }, [userProfile, customerName, customerEmail, customerCpf]);
+
+  useEffect(() => {
+    void refreshCatalog();
+  }, [refreshCatalog]);
 
   useEffect(() => {
     if (user) {
@@ -162,6 +160,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
 
     setSubmitting(true);
     try {
+      const validation = await revalidateCartBeforeCheckout();
+      if (!validation.valid || validation.changed) {
+        const message =
+          validation.issues.length > 0
+            ? validation.issues.join(' ')
+            : 'Preços ou disponibilidade na sua sacola foram atualizados. Revise o resumo antes de confirmar.';
+        setFormError(message);
+        return;
+      }
+
       const orderId = `ord-${Date.now()}`;
       const orderNumber = `CMP-${Math.floor(10000 + Math.random() * 90000)}`;
       const created = await submitOrder({

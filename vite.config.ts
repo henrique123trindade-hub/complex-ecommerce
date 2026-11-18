@@ -13,7 +13,10 @@ const HERO_MOBILE_PRELOAD_SRCSET =
 const OG_IMAGE_PATH =
   '/src/assets/images/optimized/complex_campaign_1_5292459e-1200w.webp';
 
-export default defineConfig(() => {
+export default defineConfig(({ command }) => {
+  if (command === 'build') {
+    process.env.NODE_ENV = 'production';
+  }
   return {
     plugins: [
       react(),
@@ -70,10 +73,14 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+            if (
+              id.includes('/node_modules/react/') ||
+              id.includes('/node_modules/react-dom/') ||
+              id.includes('/node_modules/scheduler/')
+            ) {
               return 'vendor-react';
             }
-            if (id.includes('node_modules/lucide-react')) {
+            if (id.includes('/node_modules/lucide-react/')) {
               return 'vendor-icons';
             }
             return undefined;

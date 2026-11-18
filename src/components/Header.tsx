@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowUpRight, Menu, Search, ShoppingBag, User, X } from 'lucide-react';
-import { useStore } from '../context/StoreContext';
+import { useAuth, useCart, useCatalog, useStoreUI } from '../context/StoreContext';
 import { BrandMark } from './BrandMark';
 
 interface HeaderProps {
@@ -8,8 +8,23 @@ interface HeaderProps {
   onNavigate: (path: string) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
-  const { editorial, cartCount, openBag, openSearch, user, isAdmin } = useStore();
+const warmSearch = () => {
+  void import('./SearchOverlay');
+};
+
+const warmBag = () => {
+  void import('./BagDrawer');
+};
+
+const warmAccount = () => {
+  void import('../pages/AccountPage');
+};
+
+export const Header: React.FC<HeaderProps> = React.memo(({ currentPath, onNavigate }) => {
+  const { editorial } = useCatalog();
+  const { cartCount } = useCart();
+  const { user, isAdmin } = useAuth();
+  const { openBag, openSearch } = useStoreUI();
   const [menuMounted, setMenuMounted] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
 
@@ -138,6 +153,8 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
             <button
               type="button"
               onClick={openSearch}
+              onMouseEnter={warmSearch}
+              onFocus={warmSearch}
               aria-label="Buscar produtos"
               className="inline-flex items-center gap-1.5 text-[12px] tracking-[0.06em] uppercase text-[#171717]/80 hover:text-[#171717] whitespace-nowrap shrink-0 py-2 cursor-pointer"
             >
@@ -148,6 +165,8 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
             <button
               type="button"
               onClick={() => handleNav('/account')}
+              onMouseEnter={warmAccount}
+              onFocus={warmAccount}
               aria-label={user ? 'Minha conta' : 'Entrar na conta'}
               className="hidden sm:inline-flex items-center gap-1.5 text-[12px] tracking-[0.06em] uppercase text-[#171717]/80 hover:text-[#171717] whitespace-nowrap shrink-0 py-2 cursor-pointer"
             >
@@ -168,6 +187,8 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
             <button
               type="button"
               onClick={openBag}
+              onMouseEnter={warmBag}
+              onFocus={warmBag}
               aria-label={`Abrir sacola (${cartCount} itens)`}
               className="inline-flex items-center gap-1.5 text-[12px] tracking-[0.06em] uppercase text-[#171717] hover:opacity-75 whitespace-nowrap shrink-0 py-2 cursor-pointer"
             >
@@ -316,4 +337,6 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
       )}
     </>
   );
-};
+});
+
+Header.displayName = 'Header';

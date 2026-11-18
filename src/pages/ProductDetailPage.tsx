@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, Minus, Plus, Ruler } from 'lucide-react';
-import { useStore } from '../context/StoreContext';
+import { useCart, useCatalog, useStoreUI } from '../context/StoreContext';
 import { ProductCard } from '../components/ProductCard';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 import { SizeGuideModal } from '../components/SizeGuideModal';
@@ -9,7 +9,6 @@ import {
   calculateShippingQuotes,
   formatBrl,
   formatCep,
-  getCategoryLabel,
   getVariantStock,
   validateCep,
 } from '../utils/commerce';
@@ -21,8 +20,32 @@ interface ProductDetailPageProps {
   onNavigate: (path: string) => void;
 }
 
-export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ slug, onNavigate }) => {
-  const { products, editorial, addToCart, openAdvisor } = useStore();
+const useIsDesktop = () => {
+  const [isDesktop, setIsDesktop] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : true
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  return isDesktop;
+};
+
+export const ProductDetailPage: React.FC<ProductDetailPageProps> = React.memo(({ slug, onNavigate }) => {
+  const { products, editorial } = useCatalog();
+  const { addToCart } = useCart();
+  const { openAdvisor } = useStoreUI();
+  const isDesktop = useIsDesktop();
+
+  const handleSelectRelated = useCallback(
+    (relSlug: string) => onNavigate(`/product/${relSlug}`),
+    [onNavigate]
+  );
 
   const product = useMemo(
     () => products.find((p) => p.slug === slug) || products[0],
@@ -152,66 +175,68 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ slug, onNa
       {/* Main Split Section */}
       <section className="max-w-[1440px] mx-auto px-4 md:px-8 py-8 md:py-12">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
-          {/* Left: Gallery */}
+          {/* Left: Gallery — mounts ONLY desktop OR mobile viewer to avoid hidden eager image decodes */}
           <div className="lg:col-span-7">
-            {/* Mobile single viewer + thumbnails */}
-            <div className="lg:hidden space-y-3">
-              <div className="aspect-[3/4] w-full bg-[#EAE6DF] overflow-hidden">
-                <OptimizedImage
-                  src={galleryImages[activeImageIdx] || galleryImages[0]}
-                  alt={`${product.name} — imagem ${activeImageIdx + 1}`}
-                  sizes="gallery"
-                  priority
-                  className="w-full h-full"
-                  imgClassName="w-full h-full object-cover"
-                />
+            {!isDesktop ? (
+              <div className="space-y-3">
+                <div className="aspect-[3/4] w-full bg-[#EAE6DF] overflow-hidden">
+                  <OptimizedImage
+                    src={galleryImages[activeImageIdx] || galleryImages[0]}
+                    alt={`${product.name} — imagem ${activeImageIdx + 1}`}
+                    sizes="gallery"
+                    priority
+                    className="w-full h-full"
+                    imgClassName="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {galleryImages.map((img, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setActiveImageIdx(idx)}
+                      className={`aspect-[3/4] bg-[#EAE6DF] overflow-hidden border cursor-pointer ${
+                        activeImageIdx === idx ? 'border-[#171717]' : 'border-transparent opacity-70'
+                      }`}
+                    >
+                      <OptimizedImage
+                        src={img}
+                        alt={`${product.name} miniatura ${idx + 1}`}
+                        sizes="thumb"
+                        eager={idx < 4}
+                        className="w-full h-full"
+                        imgClassName="w-full h-full object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-4 gap-2">
-                {galleryImages.map((img, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setActiveImageIdx(idx)}
-                    className={`aspect-[3/4] bg-[#EAE6DF] overflow-hidden border cursor-pointer ${
-                      activeImageIdx === idx ? 'border-[#171717]' : 'border-transparent opacity-70'
-                    }`}
-                  >
-                    <OptimizedImage
-                      src={img}
-                      alt={`${product.name} miniatura ${idx + 1}`}
-                      sizes="thumb"
-                      className="w-full h-full"
-                      imgClassName="w-full h-full object-cover"
-                    />
-                  </button>
-                ))}
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {galleryImages.map((img, idx) => {
+                  const isOddFinal =
+                    galleryImages.length % 2 === 1 && idx === galleryImages.length - 1;
+                  return (
+                    <div
+                      key={idx}
+                      className={`${
+                        isOddFinal ? 'col-span-2 aspect-[16/10]' : 'aspect-[3/4]'
+                      } w-full bg-[#EAE6DF] overflow-hidden`}
+                    >
+                      <OptimizedImage
+                        src={img}
+                        alt={`${product.name} — ${selectedColor} foto ${idx + 1}`}
+                        sizes={isOddFinal ? 'split' : 'gallery'}
+                        priority={idx === 0}
+                        eager={idx === 1}
+                        className="w-full h-full"
+                        imgClassName="w-full h-full object-cover"
+                      />
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-
-            {/* Desktop dual-column editorial gallery matching reference */}
-            <div className="hidden lg:grid grid-cols-2 gap-4">
-              {galleryImages.map((img, idx) => {
-                const isOddFinal =
-                  galleryImages.length % 2 === 1 && idx === galleryImages.length - 1;
-                return (
-                  <div
-                    key={idx}
-                    className={`${
-                      isOddFinal ? 'col-span-2 aspect-[16/10]' : 'aspect-[3/4]'
-                    } w-full bg-[#EAE6DF] overflow-hidden`}
-                  >
-                    <OptimizedImage
-                      src={img}
-                      alt={`${product.name} — ${selectedColor} foto ${idx + 1}`}
-                      sizes={isOddFinal ? 'split' : 'gallery'}
-                      priority={idx < 2}
-                      className="w-full h-full"
-                      imgClassName="w-full h-full object-cover"
-                    />
-                  </div>
-                );
-              })}
-            </div>
+            )}
           </div>
 
           {/* Right: Sticky Purchase Module */}
@@ -477,7 +502,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ slug, onNa
               <ProductCard
                 key={rel.id}
                 product={rel}
-                onSelect={(relSlug) => onNavigate(`/product/${relSlug}`)}
+                onSelect={handleSelectRelated}
               />
             ))}
           </div>
@@ -491,4 +516,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ slug, onNa
       />
     </main>
   );
-};
+});
+
+ProductDetailPage.displayName = 'ProductDetailPage';

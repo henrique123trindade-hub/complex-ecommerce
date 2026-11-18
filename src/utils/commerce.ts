@@ -185,3 +185,68 @@ export function filterAndSortProducts(products: Product[], filters: CatalogFilte
 
   return sorted;
 }
+
+export interface CartValidationResult {
+  valid: boolean;
+  adjustedCart: CartItem[];
+  issues: string[];
+  changed: boolean;
+}
+
+export function validateCartAgainstCatalog(
+  cart: CartItem[],
+  products: Product[]
+): CartValidationResult {
+  const byId = new Map(products.map((p) => [p.id, p]));
+  const bySlug = new Map(products.map((p) => [p.slug, p]));
+  const adjustedCart: CartItem[] = [];
+  const issues: string[] = [];
+  let changed = false;
+
+  for (const item of cart) {
+    const product = byId.get(item.productId) || bySlug.get(item.slug);
+    if (!product || !product.active) {
+      issues.push(`${item.name} não está mais disponível no catálogo.`);
+      changed = true;
+      continue;
+    }
+
+    const stock = getVariantStock(product, item.size);
+    if (stock <= 0) {
+      issues.push(`${product.name} (Tam ${item.size}) está esgotado no momento.`);
+      changed = true;
+      continue;
+    }
+
+    const clampedQty = clampQuantityForStock(item.quantity, stock);
+    if (clampedQty < item.quantity) {
+      issues.push(
+        `Estoque atualizado para ${product.name} (Tam ${item.size}): máximo ${stock} unidade(s).`
+      );
+      changed = true;
+    }
+
+    if (item.priceBrl !== product.priceBrl) {
+      issues.push(
+        `Preço de ${product.name} atualizado para ${formatBrl(product.priceBrl)}.`
+      );
+      changed = true;
+    }
+
+    adjustedCart.push({
+      ...item,
+      name: product.name,
+      priceBrl: product.priceBrl,
+      quantity: clampedQty,
+      maxStock: stock,
+    });
+  }
+
+  return {
+    valid: issues.length === 0,
+    adjustedCart,
+    issues,
+    changed,
+  };
+}
+

@@ -1,20 +1,16 @@
 import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
-import { StoreProvider, useStore } from './context/StoreContext';
+import { StoreProvider, useStoreUI } from './context/StoreContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { HomePage } from './pages/HomePage';
+import { ShopPage } from './pages/ShopPage';
+import { ProductDetailPage } from './pages/ProductDetailPage';
 import {
   parseNavigationTarget,
   resolveStorefrontRoute,
 } from './utils/routing';
 
-const ShopPage = lazy(() =>
-  import('./pages/ShopPage').then((m) => ({ default: m.ShopPage }))
-);
-const ProductDetailPage = lazy(() =>
-  import('./pages/ProductDetailPage').then((m) => ({ default: m.ProductDetailPage }))
-);
 const CollectionsPage = lazy(() =>
   import('./pages/CollectionsPage').then((m) => ({ default: m.CollectionsPage }))
 );
@@ -54,11 +50,11 @@ function readCurrentLocationUrl(): string {
 }
 
 const RouteFallback: React.FC = () => (
-  <main className="min-h-[75vh] bg-[#F1EEE8] text-[#171717]" aria-busy="true" />
+  <main className="min-h-[82vh] bg-[#F1EEE8] text-[#171717]" aria-busy="true" />
 );
 
 const StorefrontRouter: React.FC = () => {
-  const { toastMessage, isBagOpen, isSearchOpen, isAdvisorOpen } = useStore();
+  const { toastMessage, isBagOpen, isSearchOpen, isAdvisorOpen } = useStoreUI();
   const [locationUrl, setLocationUrl] = useState<string>(() => readCurrentLocationUrl());
   const [hasNavigated, setHasNavigated] = useState<boolean>(false);
 
@@ -117,20 +113,44 @@ const StorefrontRouter: React.FC = () => {
         return <HomePage onNavigate={navigate} />;
       case 'shop':
         return <ShopPage queryString={queryString} onNavigate={navigate} />;
-      case 'collections':
-        return <CollectionsPage onNavigate={navigate} />;
-      case 'about':
-        return <AboutPage onNavigate={navigate} />;
       case 'product':
         return <ProductDetailPage slug={route.slug} onNavigate={navigate} />;
+      case 'collections':
+        return (
+          <Suspense fallback={<RouteFallback />}>
+            <CollectionsPage onNavigate={navigate} />
+          </Suspense>
+        );
+      case 'about':
+        return (
+          <Suspense fallback={<RouteFallback />}>
+            <AboutPage onNavigate={navigate} />
+          </Suspense>
+        );
       case 'bag':
-        return <BagPage onNavigate={navigate} />;
+        return (
+          <Suspense fallback={<RouteFallback />}>
+            <BagPage onNavigate={navigate} />
+          </Suspense>
+        );
       case 'checkout':
-        return <CheckoutPage onNavigate={navigate} />;
+        return (
+          <Suspense fallback={<RouteFallback />}>
+            <CheckoutPage onNavigate={navigate} />
+          </Suspense>
+        );
       case 'account':
-        return <AccountPage onNavigate={navigate} />;
+        return (
+          <Suspense fallback={<RouteFallback />}>
+            <AccountPage onNavigate={navigate} />
+          </Suspense>
+        );
       case 'admin':
-        return <AdminPage onNavigate={navigate} />;
+        return (
+          <Suspense fallback={<RouteFallback />}>
+            <AdminPage onNavigate={navigate} />
+          </Suspense>
+        );
       default:
         return <HomePage onNavigate={navigate} />;
     }
@@ -144,7 +164,7 @@ const StorefrontRouter: React.FC = () => {
         key={pathname}
         className={hasNavigated ? 'flex-1 page-transition-enter' : 'flex-1'}
       >
-        <Suspense fallback={<RouteFallback />}>{renderPage()}</Suspense>
+        {renderPage()}
       </div>
 
       {!isAdminRoute && <Footer onNavigate={navigate} />}

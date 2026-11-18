@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
-import { useStore } from '../context/StoreContext';
+import { useCatalog } from '../context/StoreContext';
 import { ProductCard } from '../components/ProductCard';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 import type { CatalogFilters, CategorySlug } from '../types/store';
@@ -23,8 +23,13 @@ const CATEGORIES: Array<CategorySlug | 'ALL'> = [
 
 const SIZES = ['ALL', 'XS', 'S', 'M', 'L', 'XL', '38', '40', '42', '44', 'Único'];
 
-export const ShopPage: React.FC<ShopPageProps> = ({ queryString, onNavigate }) => {
-  const { products, catalogLoading } = useStore();
+export const ShopPage: React.FC<ShopPageProps> = React.memo(({ queryString, onNavigate }) => {
+  const { products, catalogLoading } = useCatalog();
+
+  const handleSelectProduct = useCallback(
+    (slug: string) => onNavigate(`/product/${slug}`),
+    [onNavigate]
+  );
 
   const parseFilters = (qs: string): CatalogFilters => {
     const params = new URLSearchParams(qs);
@@ -320,7 +325,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({ queryString, onNavigate }) =
                 key={product.id}
                 product={product}
                 eager={index < 4}
-                onSelect={(slug) => onNavigate(`/product/${slug}`)}
+                onSelect={handleSelectProduct}
               />
             ))}
           </div>
@@ -328,4 +333,6 @@ export const ShopPage: React.FC<ShopPageProps> = ({ queryString, onNavigate }) =
       </div>
     </main>
   );
-};
+});
+
+ShopPage.displayName = 'ShopPage';

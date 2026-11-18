@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
-import { useStore } from '../context/StoreContext';
+import { useCatalog } from '../context/StoreContext';
 import { ProductCard } from '../components/ProductCard';
 import { STORE_ASSETS } from '../data/assets';
 import { OptimizedImage } from '../components/OptimizedImage';
@@ -10,18 +10,29 @@ interface HomePageProps {
   onNavigate: (path: string) => void;
 }
 
-export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
-  const { products, categories, editorial } = useStore();
+export const HomePage: React.FC<HomePageProps> = React.memo(({ onNavigate }) => {
+  const { products, categories, editorial } = useCatalog();
 
-  const activeProducts = products.filter((p) => p.active);
-  const newArrivals = activeProducts.filter((p) => p.isNew).slice(0, 4);
-  const moreToExplore = activeProducts
-    .filter((p) => !newArrivals.some((n) => n.id === p.id))
-    .slice(0, 4);
+  const { newArrivals, moreToExplore } = useMemo(() => {
+    const active = products.filter((p) => p.active);
+    const arrivals = active.filter((p) => p.isNew).slice(0, 4);
+    const arrivalIds = new Set(arrivals.map((n) => n.id));
+    const more = active.filter((p) => !arrivalIds.has(p.id)).slice(0, 4);
+    return { newArrivals: arrivals, moreToExplore: more };
+  }, [products]);
 
-  const primaryCategories = categories
-    .filter((c) => ['tees', 'hoodies', 'bottoms', 'outerwear'].includes(c.slug.toLowerCase()))
-    .slice(0, 4);
+  const primaryCategories = useMemo(
+    () =>
+      categories
+        .filter((c) => ['tees', 'hoodies', 'bottoms', 'outerwear'].includes(c.slug.toLowerCase()))
+        .slice(0, 4),
+    [categories]
+  );
+
+  const handleSelectProduct = useCallback(
+    (slug: string) => onNavigate(`/product/${slug}`),
+    [onNavigate]
+  );
 
   return (
     <main className="bg-[#F1EEE8] text-[#171717]">
@@ -121,7 +132,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             <ProductCard
               key={product.id}
               product={product}
-              onSelect={(slug) => onNavigate(`/product/${slug}`)}
+              onSelect={handleSelectProduct}
             />
           ))}
         </div>
@@ -300,11 +311,13 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             <ProductCard
               key={product.id}
               product={product}
-              onSelect={(slug) => onNavigate(`/product/${slug}`)}
+              onSelect={handleSelectProduct}
             />
           ))}
         </div>
       </section>
     </main>
   );
-};
+});
+
+HomePage.displayName = 'HomePage';

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { AlertCircle, ArrowUpRight, Check, CheckCircle2 } from 'lucide-react';
-import { useStore } from '../context/StoreContext';
+import { useAuth, useCatalog, useStoreUI } from '../context/StoreContext';
 import { BrandMark } from './BrandMark';
 import {
   formatNewsletterSubmissionError,
@@ -12,8 +12,10 @@ interface FooterProps {
   onNavigate: (path: string) => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
-  const { editorial, openAdvisor, subscribeNewsletter } = useStore();
+export const Footer: React.FC<FooterProps> = React.memo(({ onNavigate }) => {
+  const { editorial } = useCatalog();
+  const { openAdvisor } = useStoreUI();
+  const { subscribeNewsletter } = useAuth();
 
   const [email, setEmail] = useState('');
   const [consent, setConsent] = useState(false);
@@ -371,4 +373,6 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
       </div>
     </footer>
   );
-};
+});
+
+Footer.displayName = 'Footer';

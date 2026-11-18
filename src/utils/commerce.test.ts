@@ -10,6 +10,7 @@ import {
   formatCpf,
   getCategoryLabel,
   isSizeAvailable,
+  validateCartAgainstCatalog,
   validateCep,
   validateCpf,
 } from './commerce';
@@ -152,4 +153,31 @@ test('getCategoryLabel translates canonical category slugs into Brazilian Portug
   assert.equal(getCategoryLabel('Bottoms'), 'Calças');
   assert.equal(getCategoryLabel('Outerwear'), 'Jaquetas');
   assert.equal(getCategoryLabel('Accessories'), 'Acessórios');
+});
+
+test('validateCartAgainstCatalog catches stale prices, stock drops, and removed products', () => {
+  const staleCart: CartItem[] = [
+    {
+      key: 'p1-grey-S',
+      productId: 'p1',
+      slug: 'washed-essential-hoodie',
+      name: 'Washed Essential Hoodie',
+      priceBrl: 299, // stale price (live is 329)
+      colorName: 'Washed Grey',
+      colorHex: '#6E6D6A',
+      size: 'S',
+      sku: 'CMP-HD-S',
+      quantity: 10, // exceeds live stock 4
+      maxStock: 10,
+      image: '/img1.jpg',
+    },
+  ];
+
+  const result = validateCartAgainstCatalog(staleCart, sampleProducts);
+  assert.equal(result.valid, false);
+  assert.equal(result.changed, true);
+  assert.equal(result.issues.length, 2);
+  assert.equal(result.adjustedCart[0].priceBrl, 329);
+  assert.equal(result.adjustedCart[0].quantity, 4);
+  assert.equal(result.adjustedCart[0].maxStock, 4);
 });
