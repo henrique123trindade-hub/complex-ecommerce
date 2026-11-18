@@ -1,24 +1,50 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { StoreProvider, useStore } from './context/StoreContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
-import { BagDrawer } from './components/BagDrawer';
-import { SearchOverlay } from './components/SearchOverlay';
-import { StyleAssistantDrawer } from './components/StyleAssistantDrawer';
 import { HomePage } from './pages/HomePage';
-import { ShopPage } from './pages/ShopPage';
-import { ProductDetailPage } from './pages/ProductDetailPage';
-import { CollectionsPage } from './pages/CollectionsPage';
-import { AboutPage } from './pages/AboutPage';
-import { BagPage } from './pages/BagPage';
-import { CheckoutPage } from './pages/CheckoutPage';
-import { AccountPage } from './pages/AccountPage';
-import { AdminPage } from './pages/AdminPage';
 import {
   parseNavigationTarget,
   resolveStorefrontRoute,
 } from './utils/routing';
+
+const ShopPage = lazy(() =>
+  import('./pages/ShopPage').then((m) => ({ default: m.ShopPage }))
+);
+const ProductDetailPage = lazy(() =>
+  import('./pages/ProductDetailPage').then((m) => ({ default: m.ProductDetailPage }))
+);
+const CollectionsPage = lazy(() =>
+  import('./pages/CollectionsPage').then((m) => ({ default: m.CollectionsPage }))
+);
+const AboutPage = lazy(() =>
+  import('./pages/AboutPage').then((m) => ({ default: m.AboutPage }))
+);
+const BagPage = lazy(() =>
+  import('./pages/BagPage').then((m) => ({ default: m.BagPage }))
+);
+const CheckoutPage = lazy(() =>
+  import('./pages/CheckoutPage').then((m) => ({ default: m.CheckoutPage }))
+);
+const AccountPage = lazy(() =>
+  import('./pages/AccountPage').then((m) => ({ default: m.AccountPage }))
+);
+const AdminPage = lazy(() =>
+  import('./pages/AdminPage').then((m) => ({ default: m.AdminPage }))
+);
+
+const BagDrawer = lazy(() =>
+  import('./components/BagDrawer').then((m) => ({ default: m.BagDrawer }))
+);
+const SearchOverlay = lazy(() =>
+  import('./components/SearchOverlay').then((m) => ({ default: m.SearchOverlay }))
+);
+const StyleAssistantDrawer = lazy(() =>
+  import('./components/StyleAssistantDrawer').then((m) => ({
+    default: m.StyleAssistantDrawer,
+  }))
+);
 
 function readCurrentLocationUrl(): string {
   const parsed = parseNavigationTarget(
@@ -27,9 +53,14 @@ function readCurrentLocationUrl(): string {
   return parsed.locationUrl;
 }
 
+const RouteFallback: React.FC = () => (
+  <main className="min-h-[75vh] bg-[#F1EEE8] text-[#171717]" aria-busy="true" />
+);
+
 const StorefrontRouter: React.FC = () => {
-  const { toastMessage } = useStore();
+  const { toastMessage, isBagOpen, isSearchOpen, isAdvisorOpen } = useStore();
   const [locationUrl, setLocationUrl] = useState<string>(() => readCurrentLocationUrl());
+  const [hasNavigated, setHasNavigated] = useState<boolean>(false);
 
   useEffect(() => {
     const parsed = parseNavigationTarget(
@@ -44,6 +75,7 @@ const StorefrontRouter: React.FC = () => {
       const next = parseNavigationTarget(
         `${window.location.pathname}${window.location.search}${window.location.hash}`
       );
+      setHasNavigated(true);
       setLocationUrl(next.locationUrl);
       if (next.hash) {
         window.setTimeout(() => {
@@ -62,6 +94,7 @@ const StorefrontRouter: React.FC = () => {
     if (currentFull !== target.fullUrl) {
       window.history.pushState({}, '', target.fullUrl);
     }
+    setHasNavigated(true);
     setLocationUrl(target.locationUrl);
 
     if (target.hash) {
@@ -107,15 +140,30 @@ const StorefrontRouter: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-[#F1EEE8] text-[#171717]">
       {!isAdminRoute && <Header currentPath={pathname} onNavigate={navigate} />}
 
-      <div key={pathname} className="flex-1 page-transition-enter">
-        {renderPage()}
+      <div
+        key={pathname}
+        className={hasNavigated ? 'flex-1 page-transition-enter' : 'flex-1'}
+      >
+        <Suspense fallback={<RouteFallback />}>{renderPage()}</Suspense>
       </div>
 
       {!isAdminRoute && <Footer onNavigate={navigate} />}
 
-      <BagDrawer onNavigate={navigate} />
-      <SearchOverlay onNavigate={navigate} />
-      <StyleAssistantDrawer />
+      {isBagOpen && (
+        <Suspense fallback={null}>
+          <BagDrawer onNavigate={navigate} />
+        </Suspense>
+      )}
+      {isSearchOpen && (
+        <Suspense fallback={null}>
+          <SearchOverlay onNavigate={navigate} />
+        </Suspense>
+      )}
+      {isAdvisorOpen && (
+        <Suspense fallback={null}>
+          <StyleAssistantDrawer />
+        </Suspense>
+      )}
 
       {toastMessage && (
         <div

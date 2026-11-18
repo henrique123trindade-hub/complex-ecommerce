@@ -44,7 +44,8 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
     [mobileSrc]
   );
 
-  const bypassBlur = disablePlaceholder || shouldBypassProgressiveBlur(src);
+  const bypassBlur =
+    disablePlaceholder || priority || eager || shouldBypassProgressiveBlur(src);
   const [loaded, setLoaded] = useState<boolean>(bypassBlur);
   const [errored, setErrored] = useState<boolean>(false);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -105,21 +106,23 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
           aria-hidden="true"
           decoding="async"
           style={style}
-          className="absolute inset-0 w-full h-full object-cover scale-110 blur-lg pointer-events-none select-none"
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
         />
       );
     }
     return (
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-[#E4DFD6] animate-pulse pointer-events-none"
+        className="absolute inset-0 bg-[#EAE6DF] pointer-events-none"
       />
     );
   };
 
-  const imgClasses = `${imgClassName} transition-[opacity,filter,transform] duration-300 ease-out motion-reduce:transition-none ${
-    loaded ? 'opacity-100 blur-0' : 'opacity-0 blur-sm scale-[1.02]'
-  }`;
+  const imgClasses = bypassBlur
+    ? imgClassName
+    : `${imgClassName} transition-opacity duration-200 ease-out motion-reduce:transition-none ${
+        loaded ? 'opacity-100' : 'opacity-0'
+      }`;
 
   return (
     <div className={`${hasPositionClass ? '' : 'relative '}overflow-hidden bg-[#EAE6DF] ${className}`}>

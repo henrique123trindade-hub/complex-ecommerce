@@ -1,25 +1,13 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-} from 'firebase/firestore';
-import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
-import {
-  auth,
-  db,
-  googleAuthProvider,
-  handleFirestoreError,
-  OperationType,
-} from '../lib/firebase';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import type { User } from 'firebase/auth';
 import {
   DEFAULT_EDITORIAL,
   DEMO_CATEGORIES,
@@ -39,10 +27,80 @@ import type {
 } from '../types/store';
 import { clampQuantityForStock } from '../utils/commerce';
 import { validateNewsletterEmail } from '../utils/newsletter';
+import {
+  areCatalogSnapshotsEqual,
+  readCatalogSnapshot,
+  writeCatalogSnapshot,
+} from '../utils/catalogCache';
 
 const CART_STORAGE_KEY = 'complex_cart_v1';
 const DEMO_ORDERS_STORAGE_KEY = 'complex_demo_orders_v1';
 const BOOTSTRAPPED_ADMIN_EMAIL = 'henrique123trindade@gmail.com';
+
+const LEGACY_IMAGE_MAP: Record<string, string> = {
+  '/assets/aistudio/image_e60999db.png': DEFAULT_EDITORIAL.heroDesktopImage,
+  '/src/assets/images/hero_mobile_campaign_1794952246363.jpg':
+    DEFAULT_EDITORIAL.heroMobileImage,
+  '/src/assets/images/editorial_urban_tee_1794952249745.jpg':
+    DEFAULT_EDITORIAL.campaignImage,
+  '/assets/aistudio/image_340e3e49.png': DEFAULT_EDITORIAL.storyImage,
+  '/src/assets/images/campaign_night_lifestyle_1794952250620.jpg':
+    '/src/assets/images/optimized/complex_campaign_dusk_4_87617fd1-1672w.webp',
+  '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_47-1_5292459e.png':
+    '/src/assets/images/optimized/complex_campaign_1_5292459e-1672w.webp',
+  '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_48-2_ca8505d2.png':
+    '/src/assets/images/optimized/complex_model_tee_2_ca8505d2-1122w.webp',
+  '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_48-3_41227f9c.png':
+    '/src/assets/images/optimized/complex_model_hoodie_3_41227f9c-1122w.webp',
+  '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_49-4_87617fd1.png':
+    '/src/assets/images/optimized/complex_campaign_dusk_4_87617fd1-1672w.webp',
+  '/assets/aistudio/image_2e7943ba.png': '/src/assets/images/optimized/image_2e7943ba-786w.webp',
+  '/src/assets/images/product_detail_cotton_1794952250261.jpg':
+    '/src/assets/images/optimized/product_detail_cotton_1794952250261-1200w.webp',
+  '/assets/images/product_boxy_tee_front_1794952251135.jpg':
+    '/src/assets/images/optimized/product_boxy_tee_front_1794952251135-896w.webp',
+  '/assets/images/product_boxy_tee_back_1794952252777.jpg':
+    '/src/assets/images/optimized/product_boxy_tee_back_1794952252777-896w.webp',
+  '/assets/images/product_tee_bone_1794952275758.jpg':
+    '/src/assets/images/optimized/product_tee_bone_1794952275758-896w.webp',
+  '/assets/images/product_hoodie_taupe_1794952251370.jpg':
+    '/src/assets/images/optimized/product_hoodie_taupe_1794952251370-896w.webp',
+  '/assets/images/product_hoodie_charcoal_1794952276198.jpg':
+    '/src/assets/images/optimized/product_hoodie_charcoal_1794952276198-896w.webp',
+  '/assets/images/product_crewneck_olive_1794952278742.jpg':
+    '/src/assets/images/optimized/product_crewneck_olive_1794952278742-896w.webp',
+  '/assets/images/product_cargo_olive_1794952252317.jpg':
+    '/src/assets/images/optimized/product_cargo_olive_1794952252317-896w.webp',
+  '/assets/images/product_denim_wide_1794952276236.jpg':
+    '/src/assets/images/optimized/product_denim_wide_1794952276236-896w.webp',
+  '/assets/images/product_jacket_shell_1794952276902.jpg':
+    '/src/assets/images/optimized/product_jacket_shell_1794952276902-896w.webp',
+  '/assets/images/product_accessories_cap_1794952253579.jpg':
+    '/src/assets/images/optimized/product_accessories_cap_1794952253579-896w.webp',
+};
+
+const mapLegacyUrl = (url: string): string => LEGACY_IMAGE_MAP[url] || url;
+
+async function loadFirebaseServices() {
+  const [firestore, firebaseAuth, firebaseModule] = await Promise.all([
+    import('firebase/firestore'),
+    import('firebase/auth'),
+    import('../lib/firebase'),
+  ]);
+  return {
+    ...firestore,
+    ...firebaseAuth,
+    ...firebaseModule,
+  };
+}
+
+let firebaseServicesPromise: ReturnType<typeof loadFirebaseServices> | null = null;
+function getFirebaseServices() {
+  if (!firebaseServicesPromise) {
+    firebaseServicesPromise = loadFirebaseServices();
+  }
+  return firebaseServicesPromise;
+}
 
 interface StoreContextValue {
   products: Product[];
@@ -100,11 +158,29 @@ interface StoreContextValue {
 const StoreContext = createContext<StoreContextValue | null>(null);
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [products, setProducts] = useState<Product[]>(DEMO_PRODUCTS);
-  const [categories, setCategories] = useState<CategoryItem[]>(DEMO_CATEGORIES);
-  const [editorial, setEditorial] = useState<EditorialConfig>(DEFAULT_EDITORIAL);
-  const [catalogLoading, setCatalogLoading] = useState<boolean>(true);
-  const [catalogSource, setCatalogSource] = useState<'demo' | 'firestore'>('demo');
+  const initialSnapshot = useMemo(() => readCatalogSnapshot(), []);
+
+  const [products, setProducts] = useState<Product[]>(
+    () => initialSnapshot?.products ?? DEMO_PRODUCTS
+  );
+  const [categories, setCategories] = useState<CategoryItem[]>(
+    () => initialSnapshot?.categories ?? DEMO_CATEGORIES
+  );
+  const [editorial, setEditorial] = useState<EditorialConfig>(
+    () => initialSnapshot?.editorial ?? DEFAULT_EDITORIAL
+  );
+  const [catalogLoading] = useState<boolean>(false);
+  const [catalogSource, setCatalogSource] = useState<'demo' | 'firestore'>(
+    () => initialSnapshot?.source ?? 'demo'
+  );
+
+  const snapshotRef = useRef({
+    products,
+    categories,
+    editorial,
+    source: catalogSource,
+  });
+  snapshotRef.current = { products, categories, editorial, source: catalogSource };
 
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState<boolean>(false);
@@ -141,92 +217,45 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [cart]);
 
   const refreshCatalog = useCallback(async () => {
-    setCatalogLoading(true);
     try {
+      const { collection, doc, getDoc, getDocs, orderBy, query, db } =
+        await getFirebaseServices();
+
       const [prodSnap, catSnap, edSnap] = await Promise.all([
         getDocs(collection(db, 'products')),
         getDocs(query(collection(db, 'categories'), orderBy('orderIndex', 'asc'))),
         getDoc(doc(db, 'editorial', 'homepage')),
       ]);
 
-      const legacyImageMap: Record<string, string> = {
-        '/assets/aistudio/image_e60999db.png': DEFAULT_EDITORIAL.heroDesktopImage,
-        '/src/assets/images/hero_mobile_campaign_1794952246363.jpg':
-          DEFAULT_EDITORIAL.heroMobileImage,
-        '/src/assets/images/editorial_urban_tee_1794952249745.jpg':
-          DEFAULT_EDITORIAL.campaignImage,
-        '/assets/aistudio/image_340e3e49.png': DEFAULT_EDITORIAL.storyImage,
-        '/src/assets/images/campaign_night_lifestyle_1794952250620.jpg':
-          '/src/assets/images/optimized/complex_campaign_dusk_4_87617fd1-1672w.webp',
-        '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_47-1_5292459e.png':
-          '/src/assets/images/optimized/complex_campaign_1_5292459e-1672w.webp',
-        '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_48-2_ca8505d2.png':
-          '/src/assets/images/optimized/complex_model_tee_2_ca8505d2-1122w.webp',
-        '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_48-3_41227f9c.png':
-          '/src/assets/images/optimized/complex_model_hoodie_3_41227f9c-1122w.webp',
-        '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_49-4_87617fd1.png':
-          '/src/assets/images/optimized/complex_campaign_dusk_4_87617fd1-1672w.webp',
-        '/assets/aistudio/image_2e7943ba.png': '/src/assets/images/optimized/image_2e7943ba-786w.webp',
-        '/src/assets/images/product_detail_cotton_1794952250261.jpg':
-          '/src/assets/images/optimized/product_detail_cotton_1794952250261-1200w.webp',
-        '/src/assets/images/product_boxy_tee_front_1794952251135.jpg':
-          '/src/assets/images/optimized/product_boxy_tee_front_1794952251135-896w.webp',
-        '/src/assets/images/product_boxy_tee_back_1794952252777.jpg':
-          '/src/assets/images/optimized/product_boxy_tee_back_1794952252777-896w.webp',
-        '/src/assets/images/product_tee_bone_1794952275758.jpg':
-          '/src/assets/images/optimized/product_tee_bone_1794952275758-896w.webp',
-        '/src/assets/images/product_hoodie_taupe_1794952251370.jpg':
-          '/src/assets/images/optimized/product_hoodie_taupe_1794952251370-896w.webp',
-        '/src/assets/images/product_hoodie_charcoal_1794952276198.jpg':
-          '/src/assets/images/optimized/product_hoodie_charcoal_1794952276198-896w.webp',
-        '/src/assets/images/product_crewneck_olive_1794952278742.jpg':
-          '/src/assets/images/optimized/product_crewneck_olive_1794952278742-896w.webp',
-        '/src/assets/images/product_cargo_olive_1794952252317.jpg':
-          '/src/assets/images/optimized/product_cargo_olive_1794952252317-896w.webp',
-        '/src/assets/images/product_denim_wide_1794952276236.jpg':
-          '/src/assets/images/optimized/product_denim_wide_1794952276236-896w.webp',
-        '/src/assets/images/product_jacket_shell_1794952276902.jpg':
-          '/src/assets/images/optimized/product_jacket_shell_1794952276902-896w.webp',
-        '/src/assets/images/product_accessories_cap_1794952253579.jpg':
-          '/src/assets/images/optimized/product_accessories_cap_1794952253579-896w.webp',
-      };
-      const mapLegacyUrl = (url: string): string => legacyImageMap[url] || url;
+      const nextProducts: Product[] = !prodSnap.empty
+        ? prodSnap.docs.map((d) => {
+            const data = d.data() as Product;
+            return {
+              ...data,
+              images: Array.isArray(data.images) ? data.images.map(mapLegacyUrl) : [],
+              colors: Array.isArray(data.colors)
+                ? data.colors.map((c) => ({
+                    ...c,
+                    images: Array.isArray(c.images) ? c.images.map(mapLegacyUrl) : [],
+                  }))
+                : [],
+            };
+          })
+        : DEMO_PRODUCTS;
 
-      if (!prodSnap.empty) {
-        const loadedProducts = prodSnap.docs.map((d) => {
-          const data = d.data() as Product;
-          return {
-            ...data,
-            images: Array.isArray(data.images) ? data.images.map(mapLegacyUrl) : [],
-            colors: Array.isArray(data.colors)
-              ? data.colors.map((c) => ({
-                  ...c,
-                  images: Array.isArray(c.images) ? c.images.map(mapLegacyUrl) : [],
-                }))
-              : [],
-          };
-        });
-        setProducts(loadedProducts);
-        setCatalogSource('firestore');
-      } else {
-        setProducts(DEMO_PRODUCTS);
-        setCatalogSource('demo');
-      }
+      const nextSource: 'demo' | 'firestore' = !prodSnap.empty ? 'firestore' : 'demo';
 
-      if (!catSnap.empty) {
-        setCategories(
-          catSnap.docs.map((d) => {
+      const nextCategories: CategoryItem[] = !catSnap.empty
+        ? catSnap.docs.map((d) => {
             const data = d.data() as CategoryItem;
             return {
               ...data,
               image: data.image ? mapLegacyUrl(data.image) : data.image,
             };
           })
-        );
-      } else {
-        setCategories(DEMO_CATEGORIES);
-      }
+        : DEMO_CATEGORIES;
 
+      let nextEditorial: EditorialConfig = DEFAULT_EDITORIAL;
       if (edSnap.exists()) {
         const rawEd = edSnap.data() as Partial<EditorialConfig>;
         const normalizedEd: Partial<EditorialConfig> = {
@@ -250,102 +279,146 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             ? mapLegacyUrl(rawEd.storyImage)
             : DEFAULT_EDITORIAL.storyImage,
         };
-        setEditorial({ ...DEFAULT_EDITORIAL, ...normalizedEd });
-      } else {
-        setEditorial(DEFAULT_EDITORIAL);
+        nextEditorial = { ...DEFAULT_EDITORIAL, ...normalizedEd };
+      }
+
+      const nextSnapshot = {
+        products: nextProducts,
+        categories: nextCategories,
+        editorial: nextEditorial,
+        source: nextSource,
+      };
+
+      writeCatalogSnapshot(nextSnapshot);
+
+      if (!areCatalogSnapshotsEqual(snapshotRef.current, nextSnapshot)) {
+        setProducts(nextProducts);
+        setCategories(nextCategories);
+        setEditorial(nextEditorial);
+        setCatalogSource(nextSource);
       }
     } catch {
-      // Preserve demo catalog on offline or unseeded Firestore
-      setProducts(DEMO_PRODUCTS);
-      setCategories(DEMO_CATEGORIES);
-      setEditorial(DEFAULT_EDITORIAL);
-      setCatalogSource('demo');
-    } finally {
-      setCatalogLoading(false);
+      // Keep cached or demo catalog when offline or unseeded
     }
   }, []);
 
   useEffect(() => {
-    void refreshCatalog();
-  }, [refreshCatalog]);
+    let cancelled = false;
+    let unsubAuth: (() => void) | undefined;
+    let deferredHandle: number | undefined;
 
-  useEffect(() => {
-    let settled = false;
     const safetyTimer = window.setTimeout(() => {
-      if (!settled) setAuthReady(true);
-    }, 1500);
+      if (!cancelled) setAuthReady(true);
+    }, 1200);
 
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      settled = true;
-      window.clearTimeout(safetyTimer);
-      setUser(firebaseUser);
-      if (!firebaseUser) {
-        setIsAdmin(false);
-        setUserProfile(null);
-        setAuthReady(true);
-        return;
-      }
-
-      let adminFlag =
-        firebaseUser.email === BOOTSTRAPPED_ADMIN_EMAIL && firebaseUser.emailVerified;
-
-      if (!adminFlag) {
-        try {
-          const adminDoc = await getDoc(doc(db, 'admins', firebaseUser.uid));
-          adminFlag = adminDoc.exists();
-        } catch {
-          adminFlag = false;
-        }
-      }
-      setIsAdmin(adminFlag);
-
+    const bootstrapFirebase = async () => {
       try {
-        const profileRef = doc(db, 'users', firebaseUser.uid);
-        const profileSnap = await getDoc(profileRef);
-        if (profileSnap.exists()) {
-          const data = profileSnap.data() as UserProfile;
-          setUserProfile(data);
-        } else if (firebaseUser.emailVerified) {
-          const newProfile = {
-            uid: firebaseUser.uid,
-            displayName: firebaseUser.displayName || 'Cliente COMPLEX',
-            email: firebaseUser.email || '',
-            cpf: '',
-            phone: '',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          };
-          await setDoc(profileRef, newProfile);
-          setUserProfile({
-            uid: firebaseUser.uid,
-            displayName: newProfile.displayName,
-            email: newProfile.email,
-            cpf: '',
-            phone: '',
-          });
-        }
-      } catch {
-        setUserProfile({
-          uid: firebaseUser.uid,
-          displayName: firebaseUser.displayName || 'Cliente COMPLEX',
-          email: firebaseUser.email || '',
-        });
-      }
+        const {
+          auth,
+          db,
+          doc,
+          getDoc,
+          onAuthStateChanged,
+          serverTimestamp,
+          setDoc,
+        } = await getFirebaseServices();
 
-      setAuthReady(true);
+        if (cancelled) return;
+
+        // Revalidate catalog silently without blocking first paint
+        void refreshCatalog();
+
+        unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+          window.clearTimeout(safetyTimer);
+          if (cancelled) return;
+
+          setUser(firebaseUser);
+          if (!firebaseUser) {
+            setIsAdmin(false);
+            setUserProfile(null);
+            setAuthReady(true);
+            return;
+          }
+
+          const bootAdmin =
+            firebaseUser.email === BOOTSTRAPPED_ADMIN_EMAIL && firebaseUser.emailVerified;
+          setIsAdmin(bootAdmin);
+          setAuthReady(true);
+
+          const adminPromise = bootAdmin
+            ? Promise.resolve(true)
+            : getDoc(doc(db, 'admins', firebaseUser.uid))
+                .then((snap) => snap.exists())
+                .catch(() => false);
+
+          const profileRef = doc(db, 'users', firebaseUser.uid);
+          const profilePromise = getDoc(profileRef)
+            .then(async (profileSnap) => {
+              if (profileSnap.exists()) {
+                return profileSnap.data() as UserProfile;
+              }
+              if (firebaseUser.emailVerified) {
+                const newProfile = {
+                  uid: firebaseUser.uid,
+                  displayName: firebaseUser.displayName || 'Cliente COMPLEX',
+                  email: firebaseUser.email || '',
+                  cpf: '',
+                  phone: '',
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                };
+                await setDoc(profileRef, newProfile);
+                return {
+                  uid: firebaseUser.uid,
+                  displayName: newProfile.displayName,
+                  email: newProfile.email,
+                  cpf: '',
+                  phone: '',
+                } as UserProfile;
+              }
+              return null;
+            })
+            .catch(() => ({
+              uid: firebaseUser.uid,
+              displayName: firebaseUser.displayName || 'Cliente COMPLEX',
+              email: firebaseUser.email || '',
+            }));
+
+          const [resolvedAdmin, resolvedProfile] = await Promise.all([
+            adminPromise,
+            profilePromise,
+          ]);
+
+          if (!cancelled) {
+            setIsAdmin(resolvedAdmin);
+            if (resolvedProfile) setUserProfile(resolvedProfile);
+          }
+        });
+      } catch {
+        if (!cancelled) setAuthReady(true);
+      }
+    };
+
+    // Defer heavy Firebase SDK load just past initial frame render
+    deferredHandle = window.requestAnimationFrame(() => {
+      void bootstrapFirebase();
     });
 
     return () => {
+      cancelled = true;
       window.clearTimeout(safetyTimer);
-      unsub();
+      if (deferredHandle !== undefined) window.cancelAnimationFrame(deferredHandle);
+      if (unsubAuth) unsubAuth();
     };
-  }, []);
+  }, [refreshCatalog]);
 
   const signInWithGoogle = useCallback(async () => {
+    const { auth, googleAuthProvider, signInWithPopup } = await getFirebaseServices();
     await signInWithPopup(auth, googleAuthProvider);
   }, []);
 
   const logout = useCallback(async () => {
+    const { auth, signOut } = await getFirebaseServices();
     await signOut(auth);
     showToast('Sessão encerrada.');
   }, [showToast]);
@@ -424,6 +497,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!code || !/^[A-Z0-9_-]+$/.test(code)) return null;
 
     try {
+      const { db, doc, getDoc } = await getFirebaseServices();
       const snap = await getDoc(doc(db, 'coupons', code));
       if (snap.exists()) {
         const coupon = snap.data() as CouponRecord;
@@ -465,6 +539,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // 2. If signed in & verified, persist to Firestore /orders/{id}
       if (user && user.emailVerified) {
         const firestorePath = `orders/${serverOrder.id}`;
+        const {
+          db,
+          doc,
+          handleFirestoreError,
+          OperationType,
+          serverTimestamp,
+          setDoc,
+        } = await getFirebaseServices();
         try {
           await setDoc(doc(db, 'orders', serverOrder.id), {
             id: serverOrder.id,
@@ -512,6 +594,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const fetchUserOrders = useCallback(async (): Promise<OrderRecord[]> => {
     if (!user) return getDemoOrders();
     const path = 'orders';
+    const {
+      collection,
+      db,
+      getDocs,
+      handleFirestoreError,
+      OperationType,
+      orderBy,
+      query,
+      where,
+    } = await getFirebaseServices();
     try {
       const q = query(
         collection(db, 'orders'),
@@ -534,12 +626,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         };
       });
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, path);
+      return handleFirestoreError(error, OperationType.LIST, path);
     }
   }, [getDemoOrders, user]);
 
   const fetchAllOrders = useCallback(async (): Promise<OrderRecord[]> => {
     const path = 'orders';
+    const { collection, db, getDocs, handleFirestoreError, OperationType, orderBy, query } =
+      await getFirebaseServices();
     try {
       const snap = await getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')));
       return snap.docs.map((d) => {
@@ -557,38 +651,44 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         };
       });
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, path);
+      return handleFirestoreError(error, OperationType.LIST, path);
     }
   }, []);
 
   const fetchAllCoupons = useCallback(async (): Promise<CouponRecord[]> => {
     const path = 'coupons';
+    const { collection, db, getDocs, handleFirestoreError, OperationType } =
+      await getFirebaseServices();
     try {
       const snap = await getDocs(collection(db, 'coupons'));
       return snap.docs.map((d) => d.data() as CouponRecord);
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, path);
+      return handleFirestoreError(error, OperationType.LIST, path);
     }
   }, []);
 
   const fetchAllCustomers = useCallback(async (): Promise<UserProfile[]> => {
     const path = 'users';
+    const { collection, db, getDocs, handleFirestoreError, OperationType } =
+      await getFirebaseServices();
     try {
       const snap = await getDocs(collection(db, 'users'));
       return snap.docs.map((d) => d.data() as UserProfile);
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, path);
+      return handleFirestoreError(error, OperationType.LIST, path);
     }
   }, []);
 
   const fetchAddresses = useCallback(async (): Promise<BrazilianAddress[]> => {
     if (!user) return [];
     const path = `users/${user.uid}/addresses`;
+    const { collection, db, getDocs, handleFirestoreError, OperationType } =
+      await getFirebaseServices();
     try {
       const snap = await getDocs(collection(db, 'users', user.uid, 'addresses'));
       return snap.docs.map((d) => d.data() as BrazilianAddress);
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, path);
+      return handleFirestoreError(error, OperationType.LIST, path);
     }
   }, [user]);
 
@@ -596,6 +696,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     async (address: Omit<BrazilianAddress, 'createdAt' | 'userId'>) => {
       if (!user) throw new Error('Faça login para salvar endereços.');
       const path = `users/${user.uid}/addresses/${address.id}`;
+      const { db, doc, handleFirestoreError, OperationType, serverTimestamp, setDoc } =
+        await getFirebaseServices();
       try {
         await setDoc(doc(db, 'users', user.uid, 'addresses', address.id), {
           ...address,
@@ -613,6 +715,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     async (addressId: string) => {
       if (!user) return;
       const path = `users/${user.uid}/addresses/${addressId}`;
+      const { db, deleteDoc, doc, handleFirestoreError, OperationType } =
+        await getFirebaseServices();
       try {
         await deleteDoc(doc(db, 'users', user.uid, 'addresses', addressId));
       } catch (error) {
@@ -626,6 +730,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     async (profile: Partial<UserProfile>) => {
       if (!user) return;
       const path = `users/${user.uid}`;
+      const { db, doc, handleFirestoreError, OperationType, serverTimestamp, updateDoc } =
+        await getFirebaseServices();
       try {
         await updateDoc(doc(db, 'users', user.uid), {
           displayName: profile.displayName ?? userProfile?.displayName ?? '',
@@ -645,6 +751,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const saveProduct = useCallback(
     async (product: Product) => {
       const path = `products/${product.id}`;
+      const {
+        db,
+        doc,
+        getDoc,
+        handleFirestoreError,
+        OperationType,
+        serverTimestamp,
+        setDoc,
+      } = await getFirebaseServices();
       try {
         const ref = doc(db, 'products', product.id);
         const existing = await getDoc(ref);
@@ -683,6 +798,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const deleteProduct = useCallback(
     async (productId: string) => {
       const path = `products/${productId}`;
+      const { db, deleteDoc, doc, handleFirestoreError, OperationType } =
+        await getFirebaseServices();
       try {
         await deleteDoc(doc(db, 'products', productId));
         await refreshCatalog();
@@ -697,6 +814,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const saveCategory = useCallback(
     async (category: CategoryItem) => {
       const path = `categories/${category.id}`;
+      const { db, doc, handleFirestoreError, OperationType, serverTimestamp, setDoc } =
+        await getFirebaseServices();
       try {
         await setDoc(doc(db, 'categories', category.id), {
           ...category,
@@ -714,6 +833,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const saveEditorial = useCallback(
     async (nextEditorial: EditorialConfig) => {
       const path = 'editorial/homepage';
+      const { db, doc, handleFirestoreError, OperationType, serverTimestamp, setDoc } =
+        await getFirebaseServices();
       try {
         await setDoc(doc(db, 'editorial', 'homepage'), {
           ...nextEditorial,
@@ -733,6 +854,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     async (coupon: CouponRecord) => {
       const normalized = coupon.code.trim().toUpperCase();
       const path = `coupons/${normalized}`;
+      const { db, doc, handleFirestoreError, OperationType, serverTimestamp, setDoc } =
+        await getFirebaseServices();
       try {
         await setDoc(doc(db, 'coupons', normalized), {
           code: normalized,
@@ -753,6 +876,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const deleteCoupon = useCallback(
     async (code: string) => {
       const path = `coupons/${code}`;
+      const { db, deleteDoc, doc, handleFirestoreError, OperationType } =
+        await getFirebaseServices();
       try {
         await deleteDoc(doc(db, 'coupons', code));
         showToast(`Cupom ${code} removido.`);
@@ -766,6 +891,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const updateOrderStatus = useCallback(
     async (orderId: string, status: OrderStatus) => {
       const path = `orders/${orderId}`;
+      const { db, doc, handleFirestoreError, OperationType, serverTimestamp, updateDoc } =
+        await getFirebaseServices();
       try {
         await updateDoc(doc(db, 'orders', orderId), {
           status,
@@ -780,6 +907,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   );
 
   const seedDemoCatalogToFirestore = useCallback(async () => {
+    const { db, doc, handleFirestoreError, OperationType, serverTimestamp, setDoc } =
+      await getFirebaseServices();
     try {
       await Promise.all([
         ...DEMO_PRODUCTS.map((p) =>
@@ -823,6 +952,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!consent) throw new Error('Confirme o consentimento para recebimento de novidades.');
       const id = `sub-${Date.now()}`;
       const path = `newsletter/${id}`;
+      const { db, doc, handleFirestoreError, OperationType, serverTimestamp, setDoc } =
+        await getFirebaseServices();
       try {
         await setDoc(doc(db, 'newsletter', id), {
           id,
