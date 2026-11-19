@@ -165,12 +165,28 @@ export interface CouponRecord {
   usageCount: number;
 }
 
+export type CustomerAccountStatus = 'active' | 'inactive';
+
 export interface UserProfile {
   uid: string;
   displayName: string;
   email: string;
   cpf?: string;
   phone?: string;
+  status?: CustomerAccountStatus;
+  createdAt?: string;
+  updatedAt?: string;
+  lastLoginAt?: string;
+}
+
+export interface AdminCustomerSummary {
+  profile: UserProfile;
+  orderCount: number;
+  validOrderCount: number;
+  totalSpentBrl: number;
+  lastOrderAt?: string;
+  orders: OrderRecord[];
+  isCurrentSessionUser: boolean;
 }
 
 export interface CatalogFilters {

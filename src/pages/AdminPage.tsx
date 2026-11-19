@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Database, Lock, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
 import { useAuth, useCatalog, useStoreUI } from '../context/StoreContext';
 import type {
   CategoryItem,
   CouponRecord,
+  CustomerAccountStatus,
   EditorialConfig,
   OrderRecord,
   OrderStatus,
@@ -14,12 +15,20 @@ import { STORE_ASSETS } from '../data/assets';
 import { formatBrl, getOrderStatusLabel } from '../utils/commerce';
 import { formatFirebaseAuthError } from '../utils/authErrors';
 import { OptimizedImage } from '../components/OptimizedImage';
+import { AdminCustomersPanel } from '../components/AdminCustomersPanel';
 
 interface AdminPageProps {
   onNavigate: (path: string) => void;
 }
 
-type AdminTab = 'dashboard' | 'products' | 'categories' | 'orders' | 'coupons' | 'editorial';
+type AdminTab =
+  | 'dashboard'
+  | 'customers'
+  | 'products'
+  | 'categories'
+  | 'orders'
+  | 'coupons'
+  | 'editorial';
 
 export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
   const {
@@ -32,6 +41,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
     fetchAllOrders,
     fetchAllCoupons,
     fetchAllCustomers,
+    fetchCustomerAddresses,
+    updateCustomerStatus,
+    syncMissingCustomerProfiles,
     updateOrderStatus,
   } = useAuth();
   const {
@@ -52,6 +64,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [coupons, setCoupons] = useState<CouponRecord[]>([]);
   const [customers, setCustomers] = useState<UserProfile[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [customersError, setCustomersError] = useState<string | null>(null);
 
   // Product editor state
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -75,12 +89,49 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
     }
   }, [authReady, user, isAdmin, onNavigate]);
 
+  const loadCustomersAndOrders = useCallback(async () => {
+    setCustomersLoading(true);
+    setCustomersError(null);
+    const [ordersResult, customersResult] = await Promise.allSettled([
+      fetchAllOrders(),
+      fetchAllCustomers(),
+    ]);
+
+    if (ordersResult.status === 'fulfilled') {
+      setOrders(ordersResult.value);
+    }
+
+    if (customersResult.status === 'fulfilled') {
+      setCustomers(customersResult.value);
+    } else {
+      setCustomersError(
+        'Não foi possível consultar a coleção /users no Firestore. Verifique a conexão e as permissões administrativas.'
+      );
+    }
+    setCustomersLoading(false);
+  }, [fetchAllCustomers, fetchAllOrders]);
+
   useEffect(() => {
     if (!isAdmin) return;
-    fetchAllOrders().then(setOrders).catch(() => {});
+    void loadCustomersAndOrders();
     fetchAllCoupons().then(setCoupons).catch(() => {});
-    fetchAllCustomers().then(setCustomers).catch(() => {});
-  }, [isAdmin, fetchAllOrders, fetchAllCoupons, fetchAllCustomers]);
+  }, [isAdmin, loadCustomersAndOrders, fetchAllCoupons]);
+
+  const handleSyncMissingProfiles = useCallback(async () => {
+    const result = await syncMissingCustomerProfiles(orders, customers);
+    await loadCustomersAndOrders();
+    return result;
+  }, [customers, loadCustomersAndOrders, orders, syncMissingCustomerProfiles]);
+
+  const handleUpdateCustomerStatus = useCallback(
+    async (userId: string, status: CustomerAccountStatus) => {
+      await updateCustomerStatus(userId, status);
+      setCustomers((prev) =>
+        prev.map((c) => (c.uid === userId ? { ...c, status } : c))
+      );
+    },
+    [updateCustomerStatus]
+  );
 
   if (!authReady) {
     return (
@@ -264,6 +315,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
           {(
             [
               ['dashboard', 'Visão Geral'],
+              ['customers', `Clientes (${customers.length})`],
               ['products', 'Produtos & Imagens'],
               ['categories', 'Categorias'],
               ['orders', `Pedidos (${orders.length})`],
@@ -331,24 +383,67 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
               </div>
             </div>
 
-            <div className="bg-[#F1EEE8] border border-[#171717]/15 p-6">
-              <h2 className="font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#99968F] mb-4">
-                Clientes Cadastrados ({customers.length})
-              </h2>
-              {customers.length === 0 ? (
+            <div className="bg-[#F1EEE8] border border-[#171717]/15 p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#99968F]">
+                    Clientes Cadastrados ({customers.length})
+                  </h2>
+                  <p className="text-[11px] text-[#99968F] mt-0.5">
+                    Total de contas registradas no Firestore (independente da sessão atual)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTab('customers')}
+                  className="px-4 py-2 border border-[#171717]/25 font-mono-tabular text-[11px] uppercase tracking-[0.12em] hover:border-[#171717] transition-colors cursor-pointer"
+                >
+                  Gerenciar Clientes
+                </button>
+              </div>
+
+              {customersError ? (
+                <p className="text-xs text-[#8A2C2C]">{customersError}</p>
+              ) : customersLoading && customers.length === 0 ? (
+                <p className="text-xs text-[#99968F] font-mono-tabular">
+                  Carregando clientes do Firestore...
+                </p>
+              ) : customers.length === 0 ? (
                 <p className="text-xs text-[#99968F]">Nenhum cliente registrado no Firestore ainda.</p>
               ) : (
                 <div className="divide-y divide-[#171717]/10 text-xs">
-                  {customers.map((c) => (
-                    <div key={c.uid} className="py-2.5 flex justify-between">
-                      <span>{c.displayName || 'Cliente'}</span>
-                      <span className="font-mono-tabular text-[#99968F]">{c.email}</span>
+                  {customers.slice(0, 6).map((c) => (
+                    <div key={c.uid} className="py-2.5 flex items-center justify-between gap-4">
+                      <span className="truncate">
+                        {c.displayName || 'Cliente COMPLEX'}
+                        {user && c.uid === user.uid && (
+                          <span className="ml-2 font-mono-tabular text-[10px] uppercase text-[#6A705C]">
+                            (Sessão atual)
+                          </span>
+                        )}
+                      </span>
+                      <span className="font-mono-tabular text-[#99968F] shrink-0">{c.email}</span>
                     </div>
                   ))}
                 </div>
               )}
             </div>
           </div>
+        )}
+
+        {/* CUSTOMERS TAB */}
+        {tab === 'customers' && (
+          <AdminCustomersPanel
+            customers={customers}
+            orders={orders}
+            currentUserUid={user.uid}
+            loading={customersLoading}
+            error={customersError}
+            onRefresh={loadCustomersAndOrders}
+            onSyncMissingProfiles={handleSyncMissingProfiles}
+            onUpdateCustomerStatus={handleUpdateCustomerStatus}
+            onFetchCustomerAddresses={fetchCustomerAddresses}
+          />
         )}
 
         {/* PRODUCTS TAB */}

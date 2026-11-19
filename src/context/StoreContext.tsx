@@ -19,6 +19,7 @@ import type {
   CartItem,
   CategoryItem,
   CouponRecord,
+  CustomerAccountStatus,
   EditorialConfig,
   OrderRecord,
   OrderStatus,
@@ -42,6 +43,12 @@ import {
   normalizeOrderRecord,
   normalizeProductRecord,
 } from '../utils/catalogNormalization';
+import {
+  buildCustomerCreatePayload,
+  findMissingProfilesFromOrders,
+  normalizeUserProfileRecord,
+  sanitizeCustomerString,
+} from '../utils/customers';
 
 const CART_STORAGE_KEY = 'complex_cart_v1';
 const DEMO_ORDERS_STORAGE_KEY = 'complex_demo_orders_v1';
@@ -113,6 +120,12 @@ export interface AuthContextValue {
   fetchAllOrders: () => Promise<OrderRecord[]>;
   fetchAllCoupons: () => Promise<CouponRecord[]>;
   fetchAllCustomers: () => Promise<UserProfile[]>;
+  fetchCustomerAddresses: (userId: string) => Promise<BrazilianAddress[]>;
+  updateCustomerStatus: (userId: string, status: CustomerAccountStatus) => Promise<void>;
+  syncMissingCustomerProfiles: (
+    orders: OrderRecord[],
+    existingCustomers: UserProfile[]
+  ) => Promise<{ createdCount: number; skippedCount: number; failedCount: number }>;
   fetchAddresses: () => Promise<BrazilianAddress[]>;
   saveAddress: (address: Omit<BrazilianAddress, 'createdAt' | 'userId'>) => Promise<void>;
   deleteAddress: (addressId: string) => Promise<void>;
@@ -296,6 +309,78 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return request;
   }, []);
 
+  const touchedLoginUidsRef = useRef<Set<string>>(new Set());
+
+  const ensureUserProfileRecord = useCallback(
+    async (
+      firebaseUser: User,
+      options?: { touchLastLogin?: boolean }
+    ): Promise<UserProfile | null> => {
+      const { db, doc, getDoc, serverTimestamp, setDoc, updateDoc } =
+        await getFirebaseServices();
+      const profileRef = doc(db, 'users', firebaseUser.uid);
+
+      const profileSnap = await getDoc(profileRef);
+      if (profileSnap.exists()) {
+        const existingProfile = normalizeUserProfileRecord(
+          profileSnap.data() as Record<string, unknown>,
+          firebaseUser.uid
+        );
+
+        if (options?.touchLastLogin && firebaseUser.emailVerified) {
+          const nowIso = new Date().toISOString();
+          try {
+            await updateDoc(profileRef, {
+              lastLoginAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+            touchedLoginUidsRef.current.add(firebaseUser.uid);
+            return {
+              ...existingProfile,
+              lastLoginAt: nowIso,
+              updatedAt: nowIso,
+            };
+          } catch (error) {
+            console.error('Falha ao atualizar último acesso do cliente:', error);
+          }
+        }
+
+        return existingProfile;
+      }
+
+      if (!firebaseUser.emailVerified || !firebaseUser.email) {
+        return null;
+      }
+
+      const nowIso = new Date().toISOString();
+      const createPayload = buildCustomerCreatePayload(
+        {
+          uid: firebaseUser.uid,
+          displayName: firebaseUser.displayName,
+          email: firebaseUser.email,
+          cpf: '',
+          phone: '',
+          status: 'active',
+        },
+        serverTimestamp()
+      );
+
+      await setDoc(profileRef, createPayload);
+      touchedLoginUidsRef.current.add(firebaseUser.uid);
+
+      return normalizeUserProfileRecord(
+        {
+          ...createPayload,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          lastLoginAt: nowIso,
+        },
+        firebaseUser.uid
+      );
+    },
+    []
+  );
+
   useEffect(() => {
     let cancelled = false;
     let unsubAuth: (() => void) | undefined;
@@ -320,15 +405,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const bootstrapFirebase = async () => {
       try {
-        const {
-          auth,
-          db,
-          doc,
-          getDoc,
-          onAuthStateChanged,
-          serverTimestamp,
-          setDoc,
-        } = await getFirebaseServices();
+        const { auth, db, doc, getDoc, onAuthStateChanged } = await getFirebaseServices();
 
         if (cancelled) return;
 
@@ -360,38 +437,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 .then((snap) => snap.exists())
                 .catch(() => false);
 
-          const profileRef = doc(db, 'users', firebaseUser.uid);
-          const profilePromise = getDoc(profileRef)
-            .then(async (profileSnap) => {
-              if (profileSnap.exists()) {
-                return profileSnap.data() as UserProfile;
-              }
-              if (firebaseUser.emailVerified) {
-                const newProfile = {
-                  uid: firebaseUser.uid,
-                  displayName: firebaseUser.displayName || 'Cliente COMPLEX',
-                  email: firebaseUser.email || '',
-                  cpf: '',
-                  phone: '',
-                  createdAt: serverTimestamp(),
-                  updatedAt: serverTimestamp(),
-                };
-                await setDoc(profileRef, newProfile);
-                return {
-                  uid: firebaseUser.uid,
-                  displayName: newProfile.displayName,
-                  email: newProfile.email,
-                  cpf: '',
-                  phone: '',
-                } as UserProfile;
-              }
-              return null;
-            })
-            .catch(() => ({
+          const shouldTouchLogin = !touchedLoginUidsRef.current.has(firebaseUser.uid);
+          const profilePromise = ensureUserProfileRecord(firebaseUser, {
+            touchLastLogin: shouldTouchLogin,
+          }).catch((error) => {
+            console.error('Erro ao sincronizar perfil do cliente no Firestore:', error);
+            return {
               uid: firebaseUser.uid,
               displayName: firebaseUser.displayName || 'Cliente COMPLEX',
-              email: firebaseUser.email || '',
-            }));
+              email: (firebaseUser.email || '').toLowerCase(),
+              status: 'active' as CustomerAccountStatus,
+            };
+          });
 
           const [resolvedAdmin, resolvedProfile] = await Promise.all([
             adminPromise,
@@ -408,12 +465,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     };
 
-    // Wait for page load + brief interaction breathing window before idle-loading heavy Firebase SDK
-    // so first clicks & first route transitions (Home -> Shop -> Product) never stall behind Firebase JS parse.
+    // Immediate auth bootstrap on account/admin/checkout routes so sign-in & permissions never stall;
+    // keep deferred idle bootstrap on public storefront pages to preserve fast LCP & INP.
     let delayHandle: number | undefined;
     let onLoadHandler: (() => void) | undefined;
+    const currentPath =
+      typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '/';
+    const requiresImmediateAuth =
+      currentPath.startsWith('/account') ||
+      currentPath.startsWith('/admin') ||
+      currentPath.startsWith('/checkout');
 
     const startDeferredBootstrap = () => {
+      if (requiresImmediateAuth) {
+        if (!cancelled) void bootstrapFirebase();
+        return;
+      }
       delayHandle = window.setTimeout(() => {
         if (!cancelled) {
           scheduleIdle(() => {
@@ -423,7 +490,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }, 1800);
     };
 
-    if (document.readyState === 'complete') {
+    if (requiresImmediateAuth || document.readyState === 'complete') {
       startDeferredBootstrap();
     } else {
       onLoadHandler = () => {
@@ -452,15 +519,56 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       if (unsubAuth) unsubAuth();
     };
-  }, [refreshCatalog]);
+  }, [ensureUserProfileRecord, refreshCatalog]);
 
   const signInWithGoogle = useCallback(async () => {
-    const { auth, googleAuthProvider, signInWithPopup } = await getFirebaseServices();
-    await signInWithPopup(auth, googleAuthProvider);
-  }, []);
+    const { auth, db, doc, getDoc, googleAuthProvider, signInWithPopup } =
+      await getFirebaseServices();
+    const credential = await signInWithPopup(auth, googleAuthProvider);
+    const signedInUser = credential.user;
+
+    setUser(signedInUser);
+    const bootAdmin =
+      signedInUser.email === BOOTSTRAPPED_ADMIN_EMAIL && signedInUser.emailVerified;
+    const resolvedAdmin = bootAdmin
+      ? true
+      : await getDoc(doc(db, 'admins', signedInUser.uid))
+          .then((snap) => snap.exists())
+          .catch(() => false);
+
+    setIsAdmin(resolvedAdmin);
+    setAuthReady(true);
+
+    // Guarantee persistent customer profile creation/lastLoginAt sync immediately upon login
+    try {
+      const persistedProfile = await ensureUserProfileRecord(signedInUser, {
+        touchLastLogin: true,
+      });
+      if (persistedProfile) {
+        setUserProfile(persistedProfile);
+      }
+    } catch (firstError) {
+      try {
+        const retriedProfile = await ensureUserProfileRecord(signedInUser, {
+          touchLastLogin: true,
+        });
+        if (retriedProfile) {
+          setUserProfile(retriedProfile);
+        }
+      } catch (secondError) {
+        console.error(
+          'Falha persistente ao gravar perfil do cliente no Firestore após login:',
+          firstError,
+          secondError
+        );
+        showToast('Login concluído. Tentaremos sincronizar seu perfil novamente em instantes.');
+      }
+    }
+  }, [ensureUserProfileRecord, showToast]);
 
   const logout = useCallback(async () => {
     const { auth, signOut } = await getFirebaseServices();
+    touchedLoginUidsRef.current.clear();
     await signOut(auth);
     showToast('Sessão encerrada.');
   }, [showToast]);
@@ -718,11 +826,102 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       await getFirebaseServices();
     try {
       const snap = await getDocs(collection(db, 'users'));
-      return snap.docs.map((d) => d.data() as UserProfile);
+      return snap.docs.map((d) =>
+        normalizeUserProfileRecord(d.data() as Record<string, unknown>, d.id)
+      );
     } catch (error) {
       return handleFirestoreError(error, OperationType.LIST, path);
     }
   }, [assertAdminAccess]);
+
+  const fetchCustomerAddresses = useCallback(
+    async (userId: string): Promise<BrazilianAddress[]> => {
+      assertAdminAccess();
+      const path = `users/${userId}/addresses`;
+      const { collection, db, getDocs, handleFirestoreError, OperationType } =
+        await getFirebaseServices();
+      try {
+        const snap = await getDocs(collection(db, 'users', userId, 'addresses'));
+        return snap.docs.map((d) => d.data() as BrazilianAddress);
+      } catch (error) {
+        return handleFirestoreError(error, OperationType.LIST, path);
+      }
+    },
+    [assertAdminAccess]
+  );
+
+  const updateCustomerStatus = useCallback(
+    async (userId: string, status: CustomerAccountStatus) => {
+      assertAdminAccess();
+      const path = `users/${userId}`;
+      const { db, doc, handleFirestoreError, OperationType, serverTimestamp, updateDoc } =
+        await getFirebaseServices();
+      try {
+        await updateDoc(doc(db, 'users', userId), {
+          status,
+          updatedAt: serverTimestamp(),
+        });
+        showToast(
+          status === 'active'
+            ? 'Conta do cliente marcada como ativa.'
+            : 'Conta do cliente marcada como inativa.'
+        );
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, path);
+      }
+    },
+    [assertAdminAccess, showToast]
+  );
+
+  const syncMissingCustomerProfiles = useCallback(
+    async (
+      ordersList: OrderRecord[],
+      existingCustomers: UserProfile[]
+    ): Promise<{ createdCount: number; skippedCount: number; failedCount: number }> => {
+      assertAdminAccess();
+      const candidates = findMissingProfilesFromOrders(existingCustomers, ordersList);
+      if (candidates.length === 0) {
+        return { createdCount: 0, skippedCount: 0, failedCount: 0 };
+      }
+
+      const { db, doc, getDoc, serverTimestamp, setDoc } = await getFirebaseServices();
+      let createdCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
+
+      for (const candidate of candidates) {
+        try {
+          const ref = doc(db, 'users', candidate.uid);
+          const snap = await getDoc(ref);
+          if (snap.exists()) {
+            skippedCount += 1;
+            continue;
+          }
+
+          const payload = buildCustomerCreatePayload(
+            {
+              uid: candidate.uid,
+              displayName: candidate.displayName,
+              email: candidate.email,
+              cpf: candidate.cpf,
+              phone: candidate.phone,
+              status: 'active',
+            },
+            serverTimestamp()
+          );
+
+          await setDoc(ref, payload);
+          createdCount += 1;
+        } catch (error) {
+          console.error(`Falha ao recuperar perfil do cliente ${candidate.uid}:`, error);
+          failedCount += 1;
+        }
+      }
+
+      return { createdCount, skippedCount, failedCount };
+    },
+    [assertAdminAccess]
+  );
 
   const fetchAddresses = useCallback(async (): Promise<BrazilianAddress[]> => {
     if (!user) return [];
@@ -778,19 +977,46 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const { db, doc, handleFirestoreError, OperationType, serverTimestamp, updateDoc } =
         await getFirebaseServices();
       try {
+        // Ensure persistent profile document exists before updating (idempotent)
+        await ensureUserProfileRecord(user, { touchLastLogin: false });
+        const nextDisplayName = sanitizeCustomerString(
+          profile.displayName ?? userProfile?.displayName ?? user.displayName ?? 'Cliente COMPLEX',
+          120
+        );
+        const nextCpf = sanitizeCustomerString(profile.cpf ?? userProfile?.cpf ?? '', 20);
+        const nextPhone = sanitizeCustomerString(profile.phone ?? userProfile?.phone ?? '', 30);
+
         await updateDoc(doc(db, 'users', user.uid), {
-          displayName: profile.displayName ?? userProfile?.displayName ?? '',
-          cpf: profile.cpf ?? userProfile?.cpf ?? '',
-          phone: profile.phone ?? userProfile?.phone ?? '',
+          displayName: nextDisplayName,
+          cpf: nextCpf,
+          phone: nextPhone,
           updatedAt: serverTimestamp(),
         });
-        setUserProfile((prev) => (prev ? { ...prev, ...profile } : prev));
+        setUserProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                displayName: nextDisplayName,
+                cpf: nextCpf,
+                phone: nextPhone,
+                updatedAt: new Date().toISOString(),
+              }
+            : {
+                uid: user.uid,
+                displayName: nextDisplayName,
+                email: (user.email || '').toLowerCase(),
+                cpf: nextCpf,
+                phone: nextPhone,
+                status: 'active',
+                updatedAt: new Date().toISOString(),
+              }
+        );
         showToast('Perfil atualizado.');
       } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, path);
       }
     },
-    [showToast, user, userProfile]
+    [ensureUserProfileRecord, showToast, user, userProfile]
   );
 
   const saveProduct = useCallback(
@@ -1098,6 +1324,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       fetchAllOrders,
       fetchAllCoupons,
       fetchAllCustomers,
+      fetchCustomerAddresses,
+      updateCustomerStatus,
+      syncMissingCustomerProfiles,
       fetchAddresses,
       saveAddress,
       deleteAddress,
@@ -1121,6 +1350,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       fetchAllOrders,
       fetchAllCoupons,
       fetchAllCustomers,
+      fetchCustomerAddresses,
+      updateCustomerStatus,
+      syncMissingCustomerProfiles,
       fetchAddresses,
       saveAddress,
       deleteAddress,

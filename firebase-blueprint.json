@@ -85,6 +85,8 @@
         "email": { "type": "string", "maxLength": 160 },
         "cpf": { "type": "string", "maxLength": 20 },
         "phone": { "type": "string", "maxLength": 30 },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "lastLoginAt": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },

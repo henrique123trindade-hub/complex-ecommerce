@@ -93,3 +93,71 @@ export function validateNewsletterPayload(payload: Record<string, unknown>): { v
   if (payload.consent !== true) return { valid: false, reason: 'Explicit consent required' };
   return { valid: true };
 }
+
+export function validateUserProfilePayload(
+  payload: Record<string, unknown>,
+  targetUserId: string,
+  authUid: string | null,
+  emailVerified: boolean,
+  options?: { isAdmin?: boolean; mode?: 'create' | 'update' }
+): { valid: boolean; reason?: string } {
+  const isAdmin = Boolean(options?.isAdmin);
+  const mode = options?.mode ?? 'create';
+
+  if (!authUid || !emailVerified) {
+    return { valid: false, reason: 'Authenticated verified user required' };
+  }
+  if (!isValidBlueprintId(targetUserId)) {
+    return { valid: false, reason: 'Invalid target user id' };
+  }
+  if (authUid !== targetUserId && !isAdmin) {
+    return { valid: false, reason: 'Cross-user profile access rejected' };
+  }
+
+  const allowed = new Set([
+    'uid',
+    'displayName',
+    'email',
+    'cpf',
+    'phone',
+    'status',
+    'lastLoginAt',
+    'createdAt',
+    'updatedAt',
+  ]);
+  const required = ['uid', 'email', 'createdAt', 'updatedAt'];
+
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) {
+      return { valid: false, reason: `Shadow or sensitive field rejected: ${key}` };
+    }
+  }
+  for (const key of required) {
+    if (!(key in payload)) {
+      return { valid: false, reason: `Missing required key: ${key}` };
+    }
+  }
+  if (payload.uid !== targetUserId || !isValidBlueprintId(String(payload.uid))) {
+    return { valid: false, reason: 'UID mismatch rejected' };
+  }
+  if (typeof payload.email !== 'string' || payload.email.length < 3 || payload.email.length > 160) {
+    return { valid: false, reason: 'Invalid email' };
+  }
+  if ('displayName' in payload && (typeof payload.displayName !== 'string' || payload.displayName.length > 120)) {
+    return { valid: false, reason: 'Invalid displayName' };
+  }
+  if ('cpf' in payload && (typeof payload.cpf !== 'string' || payload.cpf.length > 20)) {
+    return { valid: false, reason: 'Invalid cpf' };
+  }
+  if ('phone' in payload && (typeof payload.phone !== 'string' || payload.phone.length > 30)) {
+    return { valid: false, reason: 'Invalid phone' };
+  }
+  if ('status' in payload && payload.status !== 'active' && payload.status !== 'inactive') {
+    return { valid: false, reason: 'Invalid account status' };
+  }
+  if (mode === 'create' && !isAdmin && 'status' in payload && payload.status !== 'active') {
+    return { valid: false, reason: 'Self-registration must initialize as active' };
+  }
+  return { valid: true };
+}
+

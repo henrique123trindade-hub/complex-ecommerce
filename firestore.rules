@@ -127,13 +127,15 @@ service cloud.firestore {
 
     function isValidUserProfile(data, userId) {
       return data.keys().hasAll(['uid', 'email', 'createdAt', 'updatedAt'])
-      && data.keys().hasOnly(['uid', 'displayName', 'email', 'cpf', 'phone', 'createdAt', 'updatedAt'])
+      && data.keys().hasOnly(['uid', 'displayName', 'email', 'cpf', 'phone', 'status', 'lastLoginAt', 'createdAt', 'updatedAt'])
       && data.uid == userId
       && isValidId(data.uid)
       && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
       && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 120))
       && (!('cpf' in data) || (data.cpf is string && data.cpf.size() <= 20))
       && (!('phone' in data) || (data.phone is string && data.phone.size() <= 30))
+      && (!('status' in data) || data.status in ['active', 'inactive'])
+      && (!('lastLoginAt' in data) || data.lastLoginAt is timestamp)
       && data.createdAt is timestamp
       && data.updatedAt is timestamp;
     }
@@ -265,16 +267,32 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
       allow list: if isAdmin();
-      allow create: if isValidId(userId) && isVerified() && isOwner(userId)
+      allow create: if isValidId(userId) && isVerified()
         && isValidUserProfile(incoming(), userId)
         && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
-      allow update: if isValidId(userId) && isVerified() && (isOwner(userId) || isAdmin())
+        && incoming().updatedAt == request.time
+        && (!('lastLoginAt' in incoming()) || incoming().lastLoginAt == request.time)
+        && (
+          (isOwner(userId) && (!('status' in incoming()) || incoming().status == 'active')) ||
+          isAdmin()
+        );
+      allow update: if isValidId(userId) && isVerified()
         && isValidUserProfile(incoming(), userId)
         && incoming().uid == existing().uid
+        && incoming().email == existing().email
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'cpf', 'phone', 'updatedAt']);
+        && (
+          (
+            isOwner(userId)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'cpf', 'phone', 'lastLoginAt', 'updatedAt'])
+            && (!('lastLoginAt' in incoming()) || incoming().lastLoginAt == request.time || ('lastLoginAt' in existing() && incoming().lastLoginAt == existing().lastLoginAt))
+          ) ||
+          (
+            isAdmin()
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'cpf', 'phone', 'status', 'updatedAt'])
+          )
+        );
 
       // Saved shipping addresses
       match /addresses/{addressId} {
