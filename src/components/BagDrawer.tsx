@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Minus, Plus, Trash2, X } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { formatBrl } from '../utils/commerce';
@@ -19,46 +19,6 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({ onNavigate }) => {
     removeFromCart,
   } = useStore();
 
-  const [mounted, setMounted] = useState(false);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const prefersReducedMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    if (isBagOpen) {
-      setMounted(true);
-      if (prefersReducedMotion) {
-        setVisible(true);
-        return;
-      }
-      let raf2 = 0;
-      const raf1 = window.requestAnimationFrame(() => {
-        raf2 = window.requestAnimationFrame(() => {
-          setVisible(true);
-        });
-      });
-      return () => {
-        window.cancelAnimationFrame(raf1);
-        if (raf2) window.cancelAnimationFrame(raf2);
-      };
-    }
-
-    if (mounted) {
-      if (prefersReducedMotion) {
-        setVisible(false);
-        setMounted(false);
-        return;
-      }
-      setVisible(false);
-      const timer = window.setTimeout(() => {
-        setMounted(false);
-      }, 320);
-      return () => window.clearTimeout(timer);
-    }
-  }, [isBagOpen, mounted]);
-
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isBagOpen) closeBag();
@@ -67,16 +27,7 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({ onNavigate }) => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isBagOpen, closeBag]);
 
-  useEffect(() => {
-    if (!mounted) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [mounted]);
-
-  if (!mounted) return null;
+  if (!isBagOpen) return null;
 
   const go = (path: string) => {
     closeBag();
@@ -84,26 +35,14 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({ onNavigate }) => {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex justify-end overflow-hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Sacola de compras"
-      data-state={visible ? 'open' : 'closed'}
-    >
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Sacola de compras">
       <div
-        className={`bag-backdrop fixed inset-0 bg-[#171717]/40 backdrop-blur-[1px] ${
-          visible ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
+        className="fixed inset-0 bg-[#171717]/40 transition-opacity"
         onClick={closeBag}
         aria-hidden="true"
       />
 
-      <aside
-        className={`bag-drawer-panel relative z-10 w-full max-w-md h-full bg-[#F1EEE8] text-[#171717] border-l border-[#171717]/15 flex flex-col shadow-2xl ${
-          visible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-95'
-        }`}
-      >
+      <aside className="relative z-10 w-full max-w-md h-full bg-[#F1EEE8] text-[#171717] border-l border-[#171717]/15 flex flex-col">
         {/* Header */}
         <div className="px-6 py-5 border-b border-[#171717]/12 flex items-center justify-between">
           <div>
@@ -118,7 +57,7 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({ onNavigate }) => {
             type="button"
             onClick={closeBag}
             aria-label="Fechar sacola"
-            className="w-10 h-10 inline-flex items-center justify-center hover:opacity-65 transition-opacity cursor-pointer"
+            className="w-10 h-10 inline-flex items-center justify-center hover:opacity-65 cursor-pointer"
           >
             <X className="w-5 h-5" strokeWidth={1.5} />
           </button>
@@ -132,7 +71,7 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({ onNavigate }) => {
               <button
                 type="button"
                 onClick={() => go('/shop')}
-                className="px-6 py-3 bg-[#171717] text-[#F1EEE8] text-xs uppercase tracking-[0.12em] font-medium hover:bg-[#171717]/90 transition-colors cursor-pointer"
+                className="px-6 py-3 bg-[#171717] text-[#F1EEE8] text-xs uppercase tracking-[0.12em] font-medium hover:bg-[#171717]/90 cursor-pointer"
               >
                 Explorar catálogo
               </button>
@@ -179,7 +118,7 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({ onNavigate }) => {
                         type="button"
                         onClick={() => updateCartQuantity(item.key, item.quantity - 1)}
                         aria-label={`Diminuir quantidade de ${item.name}`}
-                        className="w-8 h-8 inline-flex items-center justify-center hover:bg-[#171717]/5 transition-colors cursor-pointer"
+                        className="w-8 h-8 inline-flex items-center justify-center hover:bg-[#171717]/5 cursor-pointer"
                       >
                         <Minus className="w-3.5 h-3.5" />
                       </button>
@@ -191,7 +130,7 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({ onNavigate }) => {
                         onClick={() => updateCartQuantity(item.key, item.quantity + 1)}
                         disabled={item.quantity >= item.maxStock}
                         aria-label={`Aumentar quantidade de ${item.name}`}
-                        className="w-8 h-8 inline-flex items-center justify-center hover:bg-[#171717]/5 transition-colors disabled:opacity-30 cursor-pointer"
+                        className="w-8 h-8 inline-flex items-center justify-center hover:bg-[#171717]/5 disabled:opacity-30 cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
                       </button>
@@ -201,7 +140,7 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({ onNavigate }) => {
                       type="button"
                       onClick={() => removeFromCart(item.key)}
                       aria-label={`Remover ${item.name}`}
-                      className="text-xs text-[#99968F] hover:text-[#171717] transition-colors inline-flex items-center gap-1 cursor-pointer"
+                      className="text-xs text-[#99968F] hover:text-[#171717] inline-flex items-center gap-1 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Remover</span>

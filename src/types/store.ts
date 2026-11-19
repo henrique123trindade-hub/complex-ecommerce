@@ -165,19 +165,12 @@ export interface CouponRecord {
   usageCount: number;
 }
 
-export type UserRole = 'customer' | 'admin';
-
 export interface UserProfile {
   uid: string;
   displayName: string;
   email: string;
   cpf?: string;
   phone?: string;
-  role?: UserRole;
-  authMethods?: string[];
-  emailVerified?: boolean;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface CatalogFilters {

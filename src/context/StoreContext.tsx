@@ -24,7 +24,6 @@ import type {
   OrderStatus,
   Product,
   UserProfile,
-  UserRole,
 } from '../types/store';
 import {
   clampQuantityForStock,
@@ -37,21 +36,10 @@ import {
   readCatalogSnapshot,
   writeCatalogSnapshot,
 } from '../utils/catalogCache';
-import {
-  buildProtectedHeaders,
-  checkAuthRateLimit,
-  clearServerSession,
-  reportSecurityEvent,
-  syncServerSession,
-} from '../lib/authApi';
-import {
-  validateAuthEmail,
-  validateAuthName,
-  validatePasswordStrength,
-} from '../utils/authValidation';
 
 const CART_STORAGE_KEY = 'complex_cart_v1';
 const DEMO_ORDERS_STORAGE_KEY = 'complex_demo_orders_v1';
+const BOOTSTRAPPED_ADMIN_EMAIL = 'henrique123trindade@gmail.com';
 
 const LEGACY_IMAGE_MAP: Record<string, string> = {
   '/assets/aistudio/image_e60999db.png': DEFAULT_EDITORIAL.heroDesktopImage,
@@ -147,21 +135,8 @@ export interface AuthContextValue {
   user: User | null;
   authReady: boolean;
   isAdmin: boolean;
-  userRole: UserRole;
   userProfile: UserProfile | null;
   signInWithGoogle: () => Promise<void>;
-  registerWithEmail: (input: { name: string; email: string; password: string }) => Promise<void>;
-  signInWithEmail: (input: { email: string; password: string }) => Promise<void>;
-  requestPasswordReset: (email: string) => Promise<void>;
-  resendVerificationEmail: () => Promise<void>;
-  refreshEmailVerification: () => Promise<boolean>;
-  inspectPasswordResetCode: (oobCode: string) => Promise<string>;
-  confirmResetPasswordWithCode: (oobCode: string, newPassword: string) => Promise<void>;
-  applyEmailVerificationCode: (oobCode: string) => Promise<void>;
-  linkGoogleAccount: (currentPassword: string) => Promise<void>;
-  linkPasswordCredential: (newPassword: string) => Promise<void>;
-  changeUserPassword: (currentPassword: string, newPassword: string) => Promise<void>;
-  getAuthHeaders: () => Promise<Record<string, string>>;
   logout: () => Promise<void>;
   validateCoupon: (code: string) => Promise<CouponRecord | null>;
   submitOrder: (order: Omit<OrderRecord, 'createdAt' | 'updatedAt'>) => Promise<OrderRecord>;
@@ -234,7 +209,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
-  const [userRole, setUserRole] = useState<UserRole>('customer');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -374,184 +348,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return request;
   }, []);
 
-  const syncAuthenticatedUser = useCallback(
-    async (firebaseUser: User | null, options?: { forceTokenRefresh?: boolean }) => {
-      if (!firebaseUser) {
-        setUser(null);
-        setIsAdmin(false);
-        setUserRole('customer');
-        setUserProfile(null);
-        setAuthReady(true);
-        void clearServerSession();
-        return false;
-      }
-
-      const authMethods = Array.from(
-        new Set(
-          (firebaseUser.providerData || [])
-            .map((p) => p.providerId)
-            .filter((p): p is string => Boolean(p))
-        )
-      );
-      const safeMethods = authMethods.length > 0 ? authMethods.slice(0, 5) : ['password'];
-
-      setUser(firebaseUser);
-
-      try {
-        const { db, doc, getDoc, serverTimestamp, setDoc, updateDoc } =
-          await getFirebaseServices();
-
-        const idToken = await firebaseUser.getIdToken(Boolean(options?.forceTokenRefresh));
-        const serverSession = await syncServerSession(idToken);
-        const firestoreAdminCheck = await getDoc(doc(db, 'admins', firebaseUser.uid))
-          .then((snap) => snap.exists() && snap.data()?.active !== false)
-          .catch(() => false);
-
-        const resolvedRole: UserRole =
-          firebaseUser.emailVerified && (serverSession.role === 'admin' || firestoreAdminCheck)
-            ? 'admin'
-            : 'customer';
-        const resolvedIsAdmin = resolvedRole === 'admin';
-
-        // If the server recognized bootstrapped admin ownership before /admins/{uid} existed, materialize /admins/{uid}
-        if (resolvedIsAdmin && !firestoreAdminCheck) {
-          await setDoc(doc(db, 'admins', firebaseUser.uid), {
-            uid: firebaseUser.uid,
-            email: (firebaseUser.email || '').toLowerCase(),
-            role: 'admin',
-            active: true,
-            grantedBy: 'owner-bootstrap',
-            grantedAt: serverTimestamp(),
-          }).catch(() => {});
-        }
-
-        const profileRef = doc(db, 'users', firebaseUser.uid);
-        let resolvedProfile: UserProfile | null = null;
-
-        if (firebaseUser.emailVerified) {
-          try {
-            const profileSnap = await getDoc(profileRef);
-            if (profileSnap.exists()) {
-              const raw = profileSnap.data() as UserProfile & {
-                createdAt?: { toDate?: () => Date } | string;
-                updatedAt?: { toDate?: () => Date } | string;
-              };
-              const storedMethods = Array.isArray(raw.authMethods) ? raw.authMethods : [];
-              const methodsChanged =
-                storedMethods.length !== safeMethods.length ||
-                safeMethods.some((m, i) => storedMethods[i] !== m);
-              const needsMigration =
-                !raw.role || raw.emailVerified !== true || methodsChanged;
-
-              if (needsMigration) {
-                const targetRole: UserRole = !raw.role
-                  ? 'customer'
-                  : (raw.role as UserRole);
-                await updateDoc(profileRef, {
-                  role: targetRole,
-                  authMethods: safeMethods,
-                  emailVerified: true,
-                  updatedAt: serverTimestamp(),
-                }).catch(() => {});
-              }
-
-              if (resolvedIsAdmin && raw.role !== 'admin') {
-                await updateDoc(profileRef, {
-                  role: 'admin',
-                  updatedAt: serverTimestamp(),
-                }).catch(() => {});
-              }
-
-              resolvedProfile = {
-                uid: firebaseUser.uid,
-                displayName: raw.displayName || firebaseUser.displayName || 'Cliente COMPLEX',
-                email: raw.email || firebaseUser.email || '',
-                cpf: raw.cpf || '',
-                phone: raw.phone || '',
-                role: resolvedIsAdmin ? 'admin' : (raw.role as UserRole) || 'customer',
-                authMethods: safeMethods,
-                emailVerified: true,
-                createdAt:
-                  raw.createdAt && typeof (raw.createdAt as { toDate?: () => Date }).toDate === 'function'
-                    ? (raw.createdAt as { toDate: () => Date }).toDate().toISOString()
-                    : typeof raw.createdAt === 'string'
-                    ? raw.createdAt
-                    : undefined,
-                updatedAt:
-                  raw.updatedAt && typeof (raw.updatedAt as { toDate?: () => Date }).toDate === 'function'
-                    ? (raw.updatedAt as { toDate: () => Date }).toDate().toISOString()
-                    : typeof raw.updatedAt === 'string'
-                    ? raw.updatedAt
-                    : undefined,
-              };
-            } else {
-              // Every newly created profile automatically receives 'customer'
-              const initialProfile = {
-                uid: firebaseUser.uid,
-                displayName: firebaseUser.displayName || 'Cliente COMPLEX',
-                email: (firebaseUser.email || '').toLowerCase(),
-                cpf: '',
-                phone: '',
-                role: 'customer' as const,
-                authMethods: safeMethods,
-                emailVerified: true,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-              };
-              await setDoc(profileRef, initialProfile);
-              if (resolvedIsAdmin) {
-                await updateDoc(profileRef, {
-                  role: 'admin',
-                  updatedAt: serverTimestamp(),
-                }).catch(() => {});
-              }
-              resolvedProfile = {
-                uid: firebaseUser.uid,
-                displayName: initialProfile.displayName,
-                email: initialProfile.email,
-                cpf: '',
-                phone: '',
-                role: resolvedRole,
-                authMethods: safeMethods,
-                emailVerified: true,
-              };
-            }
-          } catch {
-            resolvedProfile = {
-              uid: firebaseUser.uid,
-              displayName: firebaseUser.displayName || 'Cliente COMPLEX',
-              email: firebaseUser.email || '',
-              role: resolvedRole,
-              authMethods: safeMethods,
-              emailVerified: true,
-            };
-          }
-        } else {
-          resolvedProfile = {
-            uid: firebaseUser.uid,
-            displayName: firebaseUser.displayName || 'Cliente COMPLEX',
-            email: firebaseUser.email || '',
-            role: 'customer',
-            authMethods: safeMethods,
-            emailVerified: false,
-          };
-        }
-
-        setIsAdmin(resolvedIsAdmin);
-        setUserRole(resolvedRole);
-        setUserProfile(resolvedProfile);
-        setAuthReady(true);
-        return resolvedIsAdmin;
-      } catch {
-        setIsAdmin(false);
-        setUserRole('customer');
-        setAuthReady(true);
-        return false;
-      }
-    },
-    []
-  );
-
   useEffect(() => {
     let cancelled = false;
     let unsubAuth: (() => void) | undefined;
@@ -576,9 +372,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const bootstrapFirebase = async () => {
       try {
-        const { auth, onAuthStateChanged } = await getFirebaseServices();
+        const {
+          auth,
+          db,
+          doc,
+          getDoc,
+          onAuthStateChanged,
+          serverTimestamp,
+          setDoc,
+        } = await getFirebaseServices();
+
         if (cancelled) return;
 
+        // Yield a frame so Firebase module evaluation & onAuthStateChanged don't stack with catalog fetch into one Long Task
         window.setTimeout(() => {
           if (!cancelled) void refreshCatalog();
         }, 40);
@@ -586,26 +392,80 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
           window.clearTimeout(safetyTimer);
           if (cancelled) return;
-          await syncAuthenticatedUser(firebaseUser);
+
+          setUser(firebaseUser);
+          if (!firebaseUser) {
+            setIsAdmin(false);
+            setUserProfile(null);
+            setAuthReady(true);
+            return;
+          }
+
+          const bootAdmin =
+            firebaseUser.email === BOOTSTRAPPED_ADMIN_EMAIL && firebaseUser.emailVerified;
+          setIsAdmin(bootAdmin);
+          setAuthReady(true);
+
+          const adminPromise = bootAdmin
+            ? Promise.resolve(true)
+            : getDoc(doc(db, 'admins', firebaseUser.uid))
+                .then((snap) => snap.exists())
+                .catch(() => false);
+
+          const profileRef = doc(db, 'users', firebaseUser.uid);
+          const profilePromise = getDoc(profileRef)
+            .then(async (profileSnap) => {
+              if (profileSnap.exists()) {
+                return profileSnap.data() as UserProfile;
+              }
+              if (firebaseUser.emailVerified) {
+                const newProfile = {
+                  uid: firebaseUser.uid,
+                  displayName: firebaseUser.displayName || 'Cliente COMPLEX',
+                  email: firebaseUser.email || '',
+                  cpf: '',
+                  phone: '',
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                };
+                await setDoc(profileRef, newProfile);
+                return {
+                  uid: firebaseUser.uid,
+                  displayName: newProfile.displayName,
+                  email: newProfile.email,
+                  cpf: '',
+                  phone: '',
+                } as UserProfile;
+              }
+              return null;
+            })
+            .catch(() => ({
+              uid: firebaseUser.uid,
+              displayName: firebaseUser.displayName || 'Cliente COMPLEX',
+              email: firebaseUser.email || '',
+            }));
+
+          const [resolvedAdmin, resolvedProfile] = await Promise.all([
+            adminPromise,
+            profilePromise,
+          ]);
+
+          if (!cancelled) {
+            setIsAdmin(resolvedAdmin);
+            if (resolvedProfile) setUserProfile(resolvedProfile);
+          }
         });
       } catch {
         if (!cancelled) setAuthReady(true);
       }
     };
 
+    // Wait for page load + brief interaction breathing window before idle-loading heavy Firebase SDK
+    // so first clicks & first route transitions (Home -> Shop -> Product) never stall behind Firebase JS parse.
     let delayHandle: number | undefined;
     let onLoadHandler: (() => void) | undefined;
 
-    const currentPath =
-      typeof window !== 'undefined' ? window.location.pathname : '/';
-    const isAuthCriticalRoute =
-      currentPath.startsWith('/account') || currentPath.startsWith('/admin');
-
     const startDeferredBootstrap = () => {
-      if (isAuthCriticalRoute) {
-        if (!cancelled) void bootstrapFirebase();
-        return;
-      }
       delayHandle = window.setTimeout(() => {
         if (!cancelled) {
           scheduleIdle(() => {
@@ -615,7 +475,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }, 1800);
     };
 
-    if (document.readyState === 'complete' || isAuthCriticalRoute) {
+    if (document.readyState === 'complete') {
       startDeferredBootstrap();
     } else {
       onLoadHandler = () => {
@@ -644,237 +504,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       if (unsubAuth) unsubAuth();
     };
-  }, [refreshCatalog, syncAuthenticatedUser]);
-
-  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
-    let idToken: string | null = null;
-    if (user) {
-      idToken = await user.getIdToken();
-    } else {
-      const { auth } = await getFirebaseServices();
-      if (auth.currentUser) {
-        idToken = await auth.currentUser.getIdToken();
-      }
-    }
-    return buildProtectedHeaders(idToken);
-  }, [user]);
+  }, [refreshCatalog]);
 
   const signInWithGoogle = useCallback(async () => {
-    await checkAuthRateLimit('login', 'google');
     const { auth, googleAuthProvider, signInWithPopup } = await getFirebaseServices();
-    const credential = await signInWithPopup(auth, googleAuthProvider);
-    await syncAuthenticatedUser(credential.user, { forceTokenRefresh: true });
-  }, [syncAuthenticatedUser]);
-
-  const registerWithEmail = useCallback(
-    async (input: { name: string; email: string; password: string }) => {
-      const nameCheck = validateAuthName(input.name);
-      if (!nameCheck.valid) throw new Error(nameCheck.message);
-      const emailCheck = validateAuthEmail(input.email);
-      if (!emailCheck.valid) throw new Error(emailCheck.message);
-      const pwdCheck = validatePasswordStrength(input.password);
-      if (!pwdCheck.valid) throw new Error(pwdCheck.errors[0]);
-
-      await checkAuthRateLimit('register', emailCheck.normalized);
-      const {
-        auth,
-        createUserWithEmailAndPassword,
-        sendEmailVerification,
-        updateProfile,
-      } = await getFirebaseServices();
-
-      const credential = await createUserWithEmailAndPassword(
-        auth,
-        emailCheck.normalized,
-        input.password
-      );
-      await updateProfile(credential.user, { displayName: nameCheck.normalized });
-      await sendEmailVerification(credential.user);
-      const token = await credential.user.getIdToken(true);
-      await reportSecurityEvent('AUTH_REGISTER', 'success', token, { provider: 'password' });
-      await syncAuthenticatedUser(credential.user, { forceTokenRefresh: true });
-    },
-    [syncAuthenticatedUser]
-  );
-
-  const signInWithEmail = useCallback(
-    async (input: { email: string; password: string }) => {
-      const emailCheck = validateAuthEmail(input.email);
-      if (!emailCheck.valid) throw new Error(emailCheck.message);
-      if (!input.password) throw new Error('Informe sua senha.');
-
-      await checkAuthRateLimit('login', emailCheck.normalized);
-      const { auth, signInWithEmailAndPassword } = await getFirebaseServices();
-      try {
-        const credential = await signInWithEmailAndPassword(
-          auth,
-          emailCheck.normalized,
-          input.password
-        );
-        await syncAuthenticatedUser(credential.user, { forceTokenRefresh: true });
-      } catch (err) {
-        void reportSecurityEvent('AUTH_LOGIN_FAILED', 'denied', null, { provider: 'password' });
-        throw err;
-      }
-    },
-    [syncAuthenticatedUser]
-  );
-
-  const requestPasswordReset = useCallback(async (email: string) => {
-    const emailCheck = validateAuthEmail(email);
-    if (!emailCheck.valid) throw new Error(emailCheck.message);
-
-    await checkAuthRateLimit('password-reset', emailCheck.normalized);
-    const { auth, sendPasswordResetEmail } = await getFirebaseServices();
-    try {
-      await sendPasswordResetEmail(auth, emailCheck.normalized);
-    } catch (err) {
-      const code =
-        typeof err === 'object' && err !== null && 'code' in err ? String(err.code) : '';
-      // Anti-enumeration: never expose whether an account exists during password reset
-      if (code !== 'auth/user-not-found') {
-        throw err;
-      }
-    }
-    void reportSecurityEvent('AUTH_PASSWORD_RESET_REQUEST', 'success', null);
+    await signInWithPopup(auth, googleAuthProvider);
   }, []);
-
-  const resendVerificationEmail = useCallback(async () => {
-    const { auth, sendEmailVerification } = await getFirebaseServices();
-    if (!auth.currentUser) throw new Error('Faça login para reenviar a confirmação.');
-    await checkAuthRateLimit('resend-verification', auth.currentUser.email || auth.currentUser.uid);
-    await sendEmailVerification(auth.currentUser);
-    const token = await auth.currentUser.getIdToken();
-    void reportSecurityEvent('AUTH_EMAIL_VERIFICATION_SENT', 'success', token);
-  }, []);
-
-  const refreshEmailVerification = useCallback(async (): Promise<boolean> => {
-    const { auth } = await getFirebaseServices();
-    if (!auth.currentUser) return false;
-    await auth.currentUser.reload();
-    await syncAuthenticatedUser(auth.currentUser, { forceTokenRefresh: true });
-    return Boolean(auth.currentUser.emailVerified);
-  }, [syncAuthenticatedUser]);
-
-  const inspectPasswordResetCode = useCallback(async (oobCode: string): Promise<string> => {
-    const { auth, verifyPasswordResetCode } = await getFirebaseServices();
-    return verifyPasswordResetCode(auth, oobCode);
-  }, []);
-
-  const confirmResetPasswordWithCode = useCallback(
-    async (oobCode: string, newPassword: string) => {
-      const pwdCheck = validatePasswordStrength(newPassword);
-      if (!pwdCheck.valid) throw new Error(pwdCheck.errors[0]);
-      await checkAuthRateLimit('password-reset', 'confirm');
-      const { auth, confirmPasswordReset } = await getFirebaseServices();
-      await confirmPasswordReset(auth, oobCode, newPassword);
-      void reportSecurityEvent('AUTH_PASSWORD_RESET_CONFIRMED', 'success', null);
-    },
-    []
-  );
-
-  const applyEmailVerificationCode = useCallback(
-    async (oobCode: string) => {
-      const { applyActionCode, auth } = await getFirebaseServices();
-      await applyActionCode(auth, oobCode);
-      if (auth.currentUser) {
-        await auth.currentUser.reload();
-        await syncAuthenticatedUser(auth.currentUser, { forceTokenRefresh: true });
-      }
-    },
-    [syncAuthenticatedUser]
-  );
-
-  const linkGoogleAccount = useCallback(
-    async (currentPassword: string) => {
-      const {
-        EmailAuthProvider,
-        auth,
-        googleAuthProvider,
-        linkWithPopup,
-        reauthenticateWithCredential,
-      } = await getFirebaseServices();
-      const currentUser = auth.currentUser;
-      if (!currentUser || !currentUser.email) {
-        throw new Error('Sessão inválida. Entre novamente antes de vincular.');
-      }
-      if (!currentPassword) {
-        throw new Error('Confirme sua senha atual antes de vincular a Conta Google.');
-      }
-
-      await checkAuthRateLimit('link-account', currentUser.uid);
-      const emailCred = EmailAuthProvider.credential(currentUser.email, currentPassword);
-      await reauthenticateWithCredential(currentUser, emailCred);
-      const linked = await linkWithPopup(currentUser, googleAuthProvider);
-      const token = await linked.user.getIdToken(true);
-      await reportSecurityEvent('AUTH_ACCOUNT_LINKED', 'success', token, { method: 'google.com' });
-      await syncAuthenticatedUser(linked.user, { forceTokenRefresh: true });
-    },
-    [syncAuthenticatedUser]
-  );
-
-  const linkPasswordCredential = useCallback(
-    async (newPassword: string) => {
-      const pwdCheck = validatePasswordStrength(newPassword);
-      if (!pwdCheck.valid) throw new Error(pwdCheck.errors[0]);
-
-      const {
-        EmailAuthProvider,
-        auth,
-        googleAuthProvider,
-        linkWithCredential,
-        reauthenticateWithPopup,
-      } = await getFirebaseServices();
-      const currentUser = auth.currentUser;
-      if (!currentUser || !currentUser.email) {
-        throw new Error('Sessão inválida. Entre novamente antes de vincular.');
-      }
-
-      await checkAuthRateLimit('link-account', currentUser.uid);
-      // Require fresh interactive Google verification before adding password auth
-      await reauthenticateWithPopup(currentUser, googleAuthProvider);
-      const credential = EmailAuthProvider.credential(currentUser.email, newPassword);
-      const linked = await linkWithCredential(currentUser, credential);
-      const token = await linked.user.getIdToken(true);
-      await reportSecurityEvent('AUTH_ACCOUNT_LINKED', 'success', token, { method: 'password' });
-      await syncAuthenticatedUser(linked.user, { forceTokenRefresh: true });
-    },
-    [syncAuthenticatedUser]
-  );
-
-  const changeUserPassword = useCallback(
-    async (currentPassword: string, newPassword: string) => {
-      const pwdCheck = validatePasswordStrength(newPassword);
-      if (!pwdCheck.valid) throw new Error(pwdCheck.errors[0]);
-
-      const { EmailAuthProvider, auth, reauthenticateWithCredential, updatePassword } =
-        await getFirebaseServices();
-      const currentUser = auth.currentUser;
-      if (!currentUser || !currentUser.email) {
-        throw new Error('Sessão inválida. Entre novamente.');
-      }
-      if (!currentPassword) {
-        throw new Error('Informe sua senha atual.');
-      }
-
-      await checkAuthRateLimit('link-account', currentUser.uid);
-      const cred = EmailAuthProvider.credential(currentUser.email, currentPassword);
-      await reauthenticateWithCredential(currentUser, cred);
-      await updatePassword(currentUser, newPassword);
-      const token = await currentUser.getIdToken(true);
-      await reportSecurityEvent('AUTH_PASSWORD_UPDATED', 'success', token);
-    },
-    []
-  );
 
   const logout = useCallback(async () => {
     const { auth, signOut } = await getFirebaseServices();
-    await clearServerSession();
     await signOut(auth);
-    setUser(null);
-    setIsAdmin(false);
-    setUserRole('customer');
-    setUserProfile(null);
     showToast('Sessão encerrada.');
   }, [showToast]);
 
@@ -986,12 +625,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const submitOrder = useCallback(
     async (orderInput: Omit<OrderRecord, 'createdAt' | 'updatedAt'>): Promise<OrderRecord> => {
-      // 1. Register via Express server (CSRF + Bearer ownership enforcement)
-      const headers = await getAuthHeaders();
+      // 1. Register via Express server (real server-side validation for demo order)
       const res = await fetch('/api/orders', {
         method: 'POST',
-        credentials: 'same-origin',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderInput),
       });
 
@@ -1054,7 +691,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       clearCart();
       return serverOrder;
     },
-    [clearCart, getAuthHeaders, getDemoOrders, user]
+    [clearCart, getDemoOrders, user]
   );
 
   const fetchUserOrders = useCallback(async (): Promise<OrderRecord[]> => {
@@ -1195,9 +832,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const saveUserProfile = useCallback(
     async (profile: Partial<UserProfile>) => {
       if (!user) return;
-      if (!user.emailVerified) {
-        throw new Error('Confirme seu e-mail antes de editar os dados do perfil.');
-      }
       const path = `users/${user.uid}`;
       const { db, doc, handleFirestoreError, OperationType, serverTimestamp, updateDoc } =
         await getFirebaseServices();
@@ -1208,16 +842,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           phone: profile.phone ?? userProfile?.phone ?? '',
           updatedAt: serverTimestamp(),
         });
-        setUserProfile((prev) =>
-          prev
-            ? {
-                ...prev,
-                displayName: profile.displayName ?? prev.displayName,
-                cpf: profile.cpf ?? prev.cpf,
-                phone: profile.phone ?? prev.phone,
-              }
-            : prev
-        );
+        setUserProfile((prev) => (prev ? { ...prev, ...profile } : prev));
         showToast('Perfil atualizado.');
       } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, path);
@@ -1513,21 +1138,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       user,
       authReady,
       isAdmin,
-      userRole,
       userProfile,
       signInWithGoogle,
-      registerWithEmail,
-      signInWithEmail,
-      requestPasswordReset,
-      resendVerificationEmail,
-      refreshEmailVerification,
-      inspectPasswordResetCode,
-      confirmResetPasswordWithCode,
-      applyEmailVerificationCode,
-      linkGoogleAccount,
-      linkPasswordCredential,
-      changeUserPassword,
-      getAuthHeaders,
       logout,
       validateCoupon,
       submitOrder,
@@ -1549,21 +1161,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       user,
       authReady,
       isAdmin,
-      userRole,
       userProfile,
       signInWithGoogle,
-      registerWithEmail,
-      signInWithEmail,
-      requestPasswordReset,
-      resendVerificationEmail,
-      refreshEmailVerification,
-      inspectPasswordResetCode,
-      confirmResetPasswordWithCode,
-      applyEmailVerificationCode,
-      linkGoogleAccount,
-      linkPasswordCredential,
-      changeUserPassword,
-      getAuthHeaders,
       logout,
       validateCoupon,
       submitOrder,

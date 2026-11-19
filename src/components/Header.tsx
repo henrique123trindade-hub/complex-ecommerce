@@ -174,7 +174,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({ currentPath, onNaviga
               <span>{user ? 'Conta' : 'Entrar'}</span>
             </button>
 
-            {user && isAdmin && (
+            {isAdmin && (
               <button
                 type="button"
                 onClick={() => handleNav('/admin')}
@@ -312,24 +312,20 @@ export const Header: React.FC<HeaderProps> = React.memo(({ currentPath, onNaviga
               <button
                 type="button"
                 onClick={() => handleNav('/account')}
-                className={`h-12 px-4 border border-[#171717]/20 flex items-center justify-between font-mono-tabular text-[11px] uppercase tracking-[0.12em] hover:border-[#171717] transition-colors cursor-pointer ${
-                  user && isAdmin ? '' : 'col-span-2'
-                }`}
+                className="h-12 px-4 border border-[#171717]/20 flex items-center justify-between font-mono-tabular text-[11px] uppercase tracking-[0.12em] hover:border-[#171717] transition-colors cursor-pointer"
               >
                 <span>{user ? 'Minha Conta' : 'Entrar'}</span>
                 <User className="w-3.5 h-3.5" strokeWidth={1.5} />
               </button>
 
-              {user && isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => handleNav('/admin')}
-                  className="h-12 px-4 border border-[#6A705C]/40 text-[#6A705C] flex items-center justify-between font-mono-tabular text-[11px] uppercase tracking-[0.12em] hover:border-[#6A705C] transition-colors cursor-pointer"
-                >
-                  <span>Admin</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={1.5} />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => handleNav('/admin')}
+                className="h-12 px-4 border border-[#6A705C]/40 text-[#6A705C] flex items-center justify-between font-mono-tabular text-[11px] uppercase tracking-[0.12em] hover:border-[#6A705C] transition-colors cursor-pointer"
+              >
+                <span>Admin</span>
+                <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={1.5} />
+              </button>
             </div>
 
             <div className="pt-5 border-t border-[#171717]/12 flex items-center justify-between font-mono-tabular text-[10px] uppercase tracking-[0.14em] text-[#99968F]">

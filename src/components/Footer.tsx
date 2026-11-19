@@ -272,6 +272,15 @@ export const Footer: React.FC<FooterProps> = React.memo(({ onNavigate }) => {
                   Catálogo Completo
                 </button>
               </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('/admin')}
+                  className="hover:underline underline-offset-4 text-[#6A705C] cursor-pointer"
+                >
+                  Painel Administrativo
+                </button>
+              </li>
             </ul>
           </div>
 

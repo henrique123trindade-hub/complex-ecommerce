@@ -95,17 +95,6 @@
   transition-delay: 110ms;
 }
 
-.bag-backdrop {
-  transition: opacity var(--duration-slow) var(--ease-editorial);
-}
-
-.bag-drawer-panel {
-  transition:
-    transform 320ms var(--ease-editorial),
-    opacity var(--duration-base) var(--ease-editorial);
-  will-change: transform, opacity;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -124,9 +113,7 @@
   .product-hover-zoom,
   .product-hover-rule,
   .mobile-menu-overlay,
-  .mobile-menu-item,
-  .bag-backdrop,
-  .bag-drawer-panel {
+  .mobile-menu-item {
     transition: none !important;
     transform: none !important;
   }
