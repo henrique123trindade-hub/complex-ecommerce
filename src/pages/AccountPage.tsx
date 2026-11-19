@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LogOut, MapPin, Package, Plus, Trash2 } from 'lucide-react';
 import { useAuth, useStoreUI } from '../context/StoreContext';
 import type { BrazilianAddress, OrderRecord } from '../types/store';
 import { formatBrl, formatCep, formatCpf, getOrderStatusLabel, validateCep } from '../utils/commerce';
 import { formatFirebaseAuthError } from '../utils/authErrors';
+import { lookupBrazilianCep } from '../utils/cepLookup';
 
 interface AccountPageProps {
   onNavigate: (path: string) => void;
@@ -78,26 +79,23 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
     await saveUserProfile({ displayName, cpf, phone });
   };
 
+  const addrCepSeqRef = useRef(0);
+
   const handleAddressCepChange = async (value: string) => {
     const formatted = formatCep(value);
     setAddrCep(formatted);
-    if (!validateCep(formatted)) return;
-    try {
-      const res = await fetch(`/api/cep/${formatted.replace(/\D/g, '')}`);
-      if (res.ok) {
-        const data = (await res.json()) as {
-          street?: string;
-          neighborhood?: string;
-          city?: string;
-          state?: string;
-        };
-        if (data.street) setAddrStreet(data.street);
-        if (data.neighborhood) setAddrNeighborhood(data.neighborhood);
-        if (data.city) setAddrCity(data.city);
-        if (data.state) setAddrState(data.state);
-      }
-    } catch {
-      // Allow manual completion
+    if (!validateCep(formatted)) {
+      addrCepSeqRef.current += 1;
+      return;
+    }
+    const seq = ++addrCepSeqRef.current;
+    const result = await lookupBrazilianCep(formatted);
+    if (seq !== addrCepSeqRef.current) return;
+    if (result.status === 'found') {
+      setAddrStreet(result.data.street);
+      setAddrNeighborhood(result.data.neighborhood);
+      setAddrCity(result.data.city);
+      setAddrState(result.data.state);
     }
   };
 

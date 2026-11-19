@@ -36,7 +36,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'complex-storefront' });
 });
 
-// Brazilian CEP lookup with graceful fallback for offline/hermetic environments
+// Brazilian CEP lookup with ViaCEP + BrasilAPI fallback
 app.get('/api/cep/:cep', async (req, res) => {
   const raw = String(req.params.cep || '').replace(/\D/g, '');
   if (raw.length !== 8) {
@@ -45,47 +45,56 @@ app.get('/api/cep/:cep', async (req, res) => {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
+    const timeout = setTimeout(() => controller.abort(), 4500);
     const response = await fetch(`https://viacep.com.br/ws/${raw}/json/`, {
       signal: controller.signal,
     });
     clearTimeout(timeout);
     if (response.ok) {
       const data = (await response.json()) as Record<string, unknown>;
-      if (!data.erro) {
-        return res.json({
-          cep: `${raw.slice(0, 5)}-${raw.slice(5)}`,
-          street: String(data.logradouro || ''),
-          neighborhood: String(data.bairro || ''),
-          city: String(data.localidade || ''),
-          state: String(data.uf || ''),
-          source: 'viacep',
-        });
+      if (data.erro === true || data.erro === 'true') {
+        return res.status(404).json({ error: 'CEP não encontrado.', notFound: true });
       }
+      return res.json({
+        cep: `${raw.slice(0, 5)}-${raw.slice(5)}`,
+        street: String(data.logradouro || ''),
+        neighborhood: String(data.bairro || ''),
+        city: String(data.localidade || ''),
+        state: String(data.uf || ''),
+        source: 'viacep',
+      });
+    }
+  } catch {
+    // Try BrasilAPI fallback below
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4500);
+    const response = await fetch(`https://brasilapi.com.br/api/cep/v1/${raw}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (response.status === 404) {
+      return res.status(404).json({ error: 'CEP não encontrado.', notFound: true });
+    }
+    if (response.ok) {
+      const data = (await response.json()) as Record<string, unknown>;
+      return res.json({
+        cep: `${raw.slice(0, 5)}-${raw.slice(5)}`,
+        street: String(data.street || ''),
+        neighborhood: String(data.neighborhood || ''),
+        city: String(data.city || ''),
+        state: String(data.state || ''),
+        source: 'brasilapi',
+      });
     }
   } catch {
     // Fallback below if network lookup is unavailable
   }
 
-  const first = Number(raw[0]);
-  const fallbackRegion =
-    first === 0 || first === 1
-      ? { city: 'São Paulo', state: 'SP' }
-      : first === 2
-      ? { city: 'Rio de Janeiro', state: 'RJ' }
-      : first === 3
-      ? { city: 'Belo Horizonte', state: 'MG' }
-      : first === 8
-      ? { city: 'Curitiba', state: 'PR' }
-      : { city: 'Brasília', state: 'DF' };
-
-  return res.json({
-    cep: `${raw.slice(0, 5)}-${raw.slice(5)}`,
-    street: '',
-    neighborhood: '',
-    city: fallbackRegion.city,
-    state: fallbackRegion.state,
-    source: 'region-estimate',
+  return res.status(503).json({
+    error: 'Serviço de consulta de CEP temporariamente indisponível.',
   });
 });
 

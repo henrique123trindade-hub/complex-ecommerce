@@ -15,6 +15,7 @@ import {
   validateCheckoutEmail,
   validateCpf,
 } from '../utils/commerce';
+import { lookupBrazilianCep } from '../utils/cepLookup';
 
 interface CheckoutPageProps {
   onNavigate: (path: string) => void;
@@ -31,6 +32,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
   const prefilledProfileUidRef = useRef<string | null>(null);
 
   const [cep, setCep] = useState('');
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepLookupNote, setCepLookupNote] = useState<{
+    type: 'info' | 'error';
+    text: string;
+  } | null>(null);
+  const cepLookupSeqRef = useRef(0);
+  const numberInputRef = useRef<HTMLInputElement | null>(null);
   const [street, setStreet] = useState('');
   const [number, setNumber] = useState('');
   const [complement, setComplement] = useState('');
@@ -95,36 +103,63 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
   const handleCepChange = async (value: string) => {
     const formatted = formatCep(value);
     setCep(formatted);
-    if (validateCep(formatted)) {
-      try {
-        const res = await fetch(`/api/cep/${formatted.replace(/\D/g, '')}`);
-        if (res.ok) {
-          const data = (await res.json()) as {
-            street?: string;
-            neighborhood?: string;
-            city?: string;
-            state?: string;
-          };
-          if (data.street) setStreet(data.street);
-          if (data.neighborhood) setNeighborhood(data.neighborhood);
-          if (data.city) setCity(data.city);
-          if (data.state) setStateUf(data.state);
+    setCepLookupNote(null);
+
+    if (!validateCep(formatted)) {
+      cepLookupSeqRef.current += 1;
+      setCepLoading(false);
+      return;
+    }
+
+    const requestSeq = ++cepLookupSeqRef.current;
+    setCepLoading(true);
+    try {
+      const result = await lookupBrazilianCep(formatted);
+      if (requestSeq !== cepLookupSeqRef.current) return;
+
+      if (result.status === 'found') {
+        const { data } = result;
+        setStreet(data.street);
+        setNeighborhood(data.neighborhood);
+        setCity(data.city);
+        setStateUf(data.state);
+
+        if (!data.street) {
+          setCepLookupNote({
+            type: 'info',
+            text: `Cidade preenchida (${data.city}/${data.state}). Informe logradouro e número.`,
+          });
+        } else {
+          setCepLookupNote({
+            type: 'info',
+            text: `Endereço preenchido para ${data.city}/${data.state}.`,
+          });
+          if (!number.trim()) {
+            window.requestAnimationFrame(() => numberInputRef.current?.focus());
+          }
         }
-      } catch {
-        // User can fill manually
+      } else {
+        setCepLookupNote({ type: 'error', text: result.message });
+      }
+    } finally {
+      if (requestSeq === cepLookupSeqRef.current) {
+        setCepLoading(false);
       }
     }
   };
 
   const applySavedAddress = (addr: BrazilianAddress) => {
+    cepLookupSeqRef.current += 1;
+    setCepLoading(false);
+    setCepLookupNote(null);
     setCustomerName(addr.recipientName);
+    setCep(formatCep(addr.cep));
     setStreet(addr.street);
     setNumber(addr.number);
     setComplement(addr.complement || '');
     setNeighborhood(addr.neighborhood);
     setCity(addr.city);
     setStateUf(addr.state);
-    void handleCepChange(addr.cep);
   };
 
   const handleApplyCoupon = async () => {
@@ -173,7 +208,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
       : '';
   const cpfError =
     touched.cpf && !validateCpf(customerCpf)
-      ? 'CPF inválido. Verifique os 11 dígitos.'
+      ? 'CPF inválido. Confira os 11 dígitos e os dígitos verificadores.'
       : '';
   const cepFieldError =
     touched.cep && !validateCep(cep) ? 'Informe um CEP com 8 dígitos.' : '';
@@ -556,6 +591,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                     <input
                       id="chk-cep"
                       type="text"
+                      inputMode="numeric"
+                      autoComplete="postal-code"
                       required
                       value={cep}
                       onChange={(e) => void handleCepChange(e.target.value)}
@@ -570,6 +607,21 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                     />
                     {cepFieldError && (
                       <p className="mt-1 text-[11px] text-[#8A2C2C]">{cepFieldError}</p>
+                    )}
+                    {!cepFieldError && cepLoading && (
+                      <p className="mt-1 font-mono-tabular text-[11px] text-[#99968F]" role="status">
+                        Buscando endereço...
+                      </p>
+                    )}
+                    {!cepFieldError && !cepLoading && cepLookupNote && (
+                      <p
+                        className={`mt-1 text-[11px] ${
+                          cepLookupNote.type === 'error' ? 'text-[#8A2C2C]' : 'text-[#6A705C]'
+                        }`}
+                        role="status"
+                      >
+                        {cepLookupNote.text}
+                      </p>
                     )}
                   </div>
 
@@ -592,6 +644,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                       Número
                     </label>
                     <input
+                      ref={numberInputRef}
                       id="chk-number"
                       type="text"
                       required

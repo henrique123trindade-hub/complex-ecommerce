@@ -42,6 +42,7 @@ import {
   normalizeEditorialRecord,
   normalizeOrderRecord,
   normalizeProductRecord,
+  sanitizeServerOrderPayload,
 } from '../utils/catalogNormalization';
 import {
   buildCustomerCreatePayload,
@@ -698,19 +699,37 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const submitOrder = useCallback(
     async (orderInput: Omit<OrderRecord, 'createdAt' | 'updatedAt'>): Promise<OrderRecord> => {
-      // 1. Register via Express server (real server-side validation for demo order)
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderInput),
-      });
+      // 1. Register via Express server when available; fall back to shared payload sanitizer on static hosts (e.g. Vercel)
+      let serverOrder: OrderRecord | null = null;
+      try {
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderInput),
+        });
+        const contentType = res.headers.get('content-type') || '';
 
-      if (!res.ok) {
-        const errBody = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(errBody.error || 'Falha ao registrar pedido de demonstração.');
+        if (res.ok && contentType.includes('application/json')) {
+          serverOrder = (await res.json()) as OrderRecord;
+        } else if (res.status !== 404 && res.status !== 405 && contentType.includes('application/json')) {
+          const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(errBody.error || 'Falha ao registrar pedido de demonstração.');
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message !== 'Failed to fetch') {
+          throw err;
+        }
       }
 
-      const serverOrder = (await res.json()) as OrderRecord;
+      if (!serverOrder) {
+        const sanitized = sanitizeServerOrderPayload(
+          orderInput as unknown as Record<string, unknown>
+        );
+        if (!sanitized.ok) {
+          throw new Error(sanitized.error);
+        }
+        serverOrder = sanitized.order;
+      }
 
       // 2. If signed in & verified, persist to Firestore /orders/{id}
       if (user && user.emailVerified) {
