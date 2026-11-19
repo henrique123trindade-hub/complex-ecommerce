@@ -94,6 +94,7 @@ test('vercel.json provides SPA rewrite to /index.html while sparing API and stat
     '/favicon.ico',
     '/favicon.svg',
     '/apple-touch-icon.png',
+    '/sw.js',
   ]) {
     assert.ok(!matcher.test(excludedPath), `Expected asset/API path ${excludedPath} to bypass SPA rewrite`);
   }

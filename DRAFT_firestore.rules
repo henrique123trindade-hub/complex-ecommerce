@@ -126,11 +126,14 @@ service cloud.firestore {
     }
 
     function isValidUserProfile(data, userId) {
-      return data.keys().hasAll(['uid', 'email', 'createdAt', 'updatedAt'])
-      && data.keys().hasOnly(['uid', 'displayName', 'email', 'cpf', 'phone', 'createdAt', 'updatedAt'])
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt', 'updatedAt'])
+      && data.keys().hasOnly(['uid', 'displayName', 'email', 'cpf', 'phone', 'role', 'authMethods', 'emailVerified', 'createdAt', 'updatedAt'])
       && data.uid == userId
       && isValidId(data.uid)
       && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+      && data.role in ['customer', 'admin']
+      && (!('authMethods' in data) || (data.authMethods is list && data.authMethods.size() >= 1 && data.authMethods.size() <= 5 && data.authMethods[0] is string))
+      && (!('emailVerified' in data) || data.emailVerified is bool)
       && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 120))
       && (!('cpf' in data) || (data.cpf is string && data.cpf.size() <= 20))
       && (!('phone' in data) || (data.phone is string && data.phone.size() <= 30))
@@ -218,6 +221,17 @@ service cloud.firestore {
     // Admins registry
     match /admins/{uid} {
       allow get: if isValidId(uid) && (isOwner(uid) || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isValidId(uid) && isAdmin()
+        && incoming().keys().hasAll(['uid', 'email', 'role', 'active', 'grantedBy', 'grantedAt'])
+        && incoming().keys().hasOnly(['uid', 'email', 'role', 'active', 'grantedBy', 'grantedAt'])
+        && incoming().uid == uid
+        && incoming().email is string && incoming().email.size() >= 3 && incoming().email.size() <= 160
+        && incoming().role == 'admin'
+        && incoming().active is bool
+        && incoming().grantedBy is string && incoming().grantedBy.size() <= 80
+        && incoming().grantedAt == request.time;
+      allow delete: if isValidId(uid) && isAdmin() && uid != request.auth.uid;
     }
 
     // Storefront catalog
@@ -267,6 +281,7 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create: if isValidId(userId) && isVerified() && isOwner(userId)
         && isValidUserProfile(incoming(), userId)
+        && incoming().role == 'customer'
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
       allow update: if isValidId(userId) && isVerified() && (isOwner(userId) || isAdmin())
@@ -274,7 +289,13 @@ service cloud.firestore {
         && incoming().uid == existing().uid
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'cpf', 'phone', 'updatedAt']);
+        && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'cpf', 'phone', 'role', 'authMethods', 'emailVerified', 'updatedAt'])) ||
+          (isOwner(userId) && (
+            ('role' in existing() && incoming().role == existing().role && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'cpf', 'phone', 'authMethods', 'emailVerified', 'updatedAt'])) ||
+            (!('role' in existing()) && incoming().role == 'customer' && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'cpf', 'phone', 'role', 'authMethods', 'emailVerified', 'updatedAt']))
+          ))
+        );
 
       // Saved shipping addresses
       match /addresses/{addressId} {

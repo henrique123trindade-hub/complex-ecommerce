@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Database, Lock, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Database, Plus, RefreshCw, ShieldAlert, Sparkles, Trash2, Upload } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import type {
   CategoryItem,
@@ -12,8 +12,12 @@ import type {
 } from '../types/store';
 import { STORE_ASSETS } from '../data/assets';
 import { formatBrl } from '../utils/commerce';
-import { formatFirebaseAuthError } from '../utils/authErrors';
 import { OptimizedImage } from '../components/OptimizedImage';
+import {
+  fetchAdminAuditLogs,
+  verifyAdminServerAccess,
+  type ServerAuditLogEntry,
+} from '../lib/authApi';
 
 interface AdminPageProps {
   onNavigate: (path: string) => void;
@@ -26,7 +30,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
     user,
     authReady,
     isAdmin,
-    signInWithGoogle,
     products,
     categories,
     editorial,
@@ -42,11 +45,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
     fetchAllCustomers,
     updateOrderStatus,
     seedDemoCatalogToFirestore,
+    getAuthHeaders,
     showToast,
   } = useStore();
 
   const [tab, setTab] = useState<AdminTab>('dashboard');
-  const [authError, setAuthError] = useState('');
+  const [serverAdminConfirmed, setServerAdminConfirmed] = useState<boolean | null>(null);
+  const [auditLogs, setAuditLogs] = useState<ServerAuditLogEntry[]>([]);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [coupons, setCoupons] = useState<CouponRecord[]>([]);
   const [customers, setCustomers] = useState<UserProfile[]>([]);
@@ -67,64 +72,81 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
     setEditorialDraft(editorial);
   }, [editorial]);
 
+  const loadAuditLogs = useCallback(async () => {
+    if (!user || !isAdmin) return;
+    try {
+      const token = await user.getIdToken();
+      const events = await fetchAdminAuditLogs(token);
+      setAuditLogs(events);
+    } catch {
+      setAuditLogs([]);
+    }
+  }, [isAdmin, user]);
+
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!authReady) return;
+    if (!user || !isAdmin) {
+      setServerAdminConfirmed(false);
+      return;
+    }
+
+    let cancelled = false;
+    setServerAdminConfirmed(null);
+    user
+      .getIdToken()
+      .then((token) => verifyAdminServerAccess(token))
+      .then((ok) => {
+        if (!cancelled) {
+          setServerAdminConfirmed(ok);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setServerAdminConfirmed(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, isAdmin, user]);
+
+  useEffect(() => {
+    if (!isAdmin || serverAdminConfirmed !== true) return;
     fetchAllOrders().then(setOrders).catch(() => {});
     fetchAllCoupons().then(setCoupons).catch(() => {});
     fetchAllCustomers().then(setCustomers).catch(() => {});
-  }, [isAdmin, fetchAllOrders, fetchAllCoupons, fetchAllCustomers]);
+    void loadAuditLogs();
+  }, [isAdmin, serverAdminConfirmed, fetchAllOrders, fetchAllCoupons, fetchAllCustomers, loadAuditLogs]);
 
-  if (!authReady) {
+  if (!authReady || (user && isAdmin && serverAdminConfirmed === null)) {
     return (
-      <main className="min-h-screen bg-[#EAE6DF] flex items-center justify-center font-mono-tabular text-xs uppercase">
-        Verificando credenciais administrativas...
+      <main className="min-h-screen bg-[#F1EEE8] text-[#171717] flex items-center justify-center font-mono-tabular text-xs uppercase">
+        Carregando...
       </main>
     );
   }
 
-  if (!user || !isAdmin) {
+  if (!user || !isAdmin || serverAdminConfirmed !== true) {
     return (
-      <main className="min-h-screen bg-[#EAE6DF] text-[#171717] flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-[#F1EEE8] border border-[#171717]/20 p-8 space-y-5">
-          <div className="inline-flex items-center gap-2 font-mono-tabular text-[11px] uppercase tracking-[0.14em] text-[#99968F]">
-            <Lock className="w-3.5 h-3.5" />
-            <span>Acesso Restrito — COMPLEX Admin</span>
-          </div>
+      <main className="min-h-screen bg-[#F1EEE8] text-[#171717] flex items-center justify-center px-4">
+        <div className="max-w-md w-full border border-[#171717]/15 bg-[#EAE6DF]/55 p-8 space-y-5">
+          <p className="font-mono-tabular text-[11px] uppercase tracking-[0.14em] text-[#99968F]">
+            COMPLEX / 404
+          </p>
           <h1 className="font-display text-2xl font-bold tracking-tight">
-            Painel Administrativo Protegido
+            Página indisponível
           </h1>
           <p className="text-sm leading-relaxed text-[#171717]/75">
-            {!user
-              ? 'Autentique-se com uma conta autorizada de administrador para gerenciar catálogo, imagens reais, pedidos e conteúdo editorial.'
-              : `A conta ${user.email} não possui permissão administrativa registrada no Firestore.`}
+            O conteúdo solicitado não existe ou você não possui permissão para acessá-lo.
           </p>
-          <div className="flex flex-wrap gap-3 pt-2">
-            {!user && (
-              <button
-                type="button"
-                onClick={async () => {
-                  setAuthError('');
-                  try {
-                    await signInWithGoogle();
-                  } catch (err) {
-                    const host = typeof window !== 'undefined' ? window.location.hostname : undefined;
-                    setAuthError(formatFirebaseAuthError(err, host));
-                  }
-                }}
-                className="px-5 py-2.5 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] cursor-pointer"
-              >
-                Entrar com Google
-              </button>
-            )}
+          <div className="pt-2">
             <button
               type="button"
               onClick={() => onNavigate('/')}
-              className="px-5 py-2.5 border border-[#171717]/25 font-mono-tabular text-xs uppercase tracking-[0.12em] cursor-pointer"
+              className="px-5 py-2.5 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] cursor-pointer"
             >
               Voltar à Loja
             </button>
           </div>
-          {authError && <p className="text-xs text-[#8A2C2C]">{authError}</p>}
         </div>
       </main>
     );
@@ -173,9 +195,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
     if (!editingProduct) return;
     setAiCopyLoading(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch('/api/ai/catalog-copy', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        headers,
         body: JSON.stringify({
           productName: editingProduct.name,
           category: editingProduct.category,
@@ -332,9 +356,61 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
               ) : (
                 <div className="divide-y divide-[#171717]/10 text-xs">
                   {customers.map((c) => (
-                    <div key={c.uid} className="py-2.5 flex justify-between">
-                      <span>{c.displayName || 'Cliente'}</span>
+                    <div key={c.uid} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span>{c.displayName || 'Cliente'}</span>
+                        <span className="font-mono-tabular text-[10px] uppercase px-1.5 py-0.5 border border-[#171717]/15 text-[#99968F]">
+                          {c.role === 'admin' ? 'admin' : 'customer'}
+                        </span>
+                      </div>
                       <span className="font-mono-tabular text-[#99968F]">{c.email}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-[#F1EEE8] border border-[#171717]/15 p-6 space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#99968F] inline-flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <span>Auditoria de Segurança & Acessos ({auditLogs.length})</span>
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => void loadAuditLogs()}
+                  className="inline-flex items-center gap-1 font-mono-tabular text-[11px] uppercase underline text-[#171717]/80 hover:text-[#171717] cursor-pointer"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Atualizar</span>
+                </button>
+              </div>
+              {auditLogs.length === 0 ? (
+                <p className="text-xs text-[#99968F]">Nenhum evento de auditoria registrado nesta instância do servidor ainda.</p>
+              ) : (
+                <div className="divide-y divide-[#171717]/10 text-xs max-h-72 overflow-y-auto">
+                  {auditLogs.map((ev) => (
+                    <div key={ev.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-mono-tabular font-medium">
+                          {ev.event}{' '}
+                          <span
+                            className={`ml-1 text-[10px] uppercase ${
+                              ev.outcome === 'denied' || ev.outcome === 'error'
+                                ? 'text-[#8A2C2C]'
+                                : 'text-[#6A705C]'
+                            }`}
+                          >
+                            [{ev.outcome}]
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-[#99968F] truncate">
+                          {ev.role} · {ev.uid} · {ev.path} {ev.detail ? `· ${ev.detail}` : ''}
+                        </p>
+                      </div>
+                      <span className="font-mono-tabular text-[11px] text-[#99968F] shrink-0">
+                        {new Date(ev.timestamp).toLocaleTimeString('pt-BR')}
+                      </span>
                     </div>
                   ))}
                 </div>

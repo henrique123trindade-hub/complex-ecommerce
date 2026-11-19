@@ -1,20 +1,25 @@
-import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatFirebaseAuthError } from './authErrors.ts';
+import assert from 'node:assert/strict';
+import { formatFirebaseAuthError } from './authErrors';
 
-test('formatFirebaseAuthError explains auth/unauthorized-domain with current hostname', () => {
-  const err = Object.assign(new Error('Firebase: Error (auth/unauthorized-domain).'), {
-    code: 'auth/unauthorized-domain',
-  });
-  const msg = formatFirebaseAuthError(err, 'complex-ecommerce.vercel.app');
-  assert.match(msg, /complex-ecommerce\.vercel\.app/);
-  assert.match(msg, /Authorized domains/);
+test('formatFirebaseAuthError returns identical anti-enumeration error for bad login credentials', () => {
+  const userNotFound = formatFirebaseAuthError({ code: 'auth/user-not-found' });
+  const wrongPassword = formatFirebaseAuthError({ code: 'auth/wrong-password' });
+  const invalidCredential = formatFirebaseAuthError({ code: 'auth/invalid-credential' });
+
+  assert.equal(userNotFound, 'E-mail ou senha inválidos.');
+  assert.equal(wrongPassword, userNotFound);
+  assert.equal(invalidCredential, userNotFound);
 });
 
-test('formatFirebaseAuthError handles popup-blocked and popup-closed-by-user gracefully', () => {
-  const blocked = formatFirebaseAuthError({ code: 'auth/popup-blocked' });
-  assert.match(blocked, /pop-ups/i);
+test('formatFirebaseAuthError handles expired reset codes and rate limits safely', () => {
+  assert.match(formatFirebaseAuthError({ code: 'auth/expired-action-code' }), /expirou/i);
+  assert.match(formatFirebaseAuthError({ code: 'auth/too-many-requests' }), /Muitas tentativas/i);
+  assert.match(formatFirebaseAuthError({ code: 'auth/requires-recent-login' }), /confirme sua identidade/i);
+});
 
-  const closed = formatFirebaseAuthError(new Error('Firebase: Error (auth/popup-closed-by-user).'));
-  assert.match(closed, /cancelado/i);
+test('formatFirebaseAuthError preserves domain authorization guidance', () => {
+  const msg = formatFirebaseAuthError({ code: 'auth/unauthorized-domain' }, 'complex-store.app');
+  assert.match(msg, /complex-store\.app/);
+  assert.match(msg, /Authorized domains/);
 });

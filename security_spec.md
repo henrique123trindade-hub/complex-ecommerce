@@ -10,7 +10,7 @@
 7. **Path & Size Bounds**: Every document ID matches `^[a-zA-Z0-9_-]+$` (`<= 128` chars), and every string and array field is bounded in size.
 
 ## 2. The "Dirty Dozen" Adversarial Payloads (Must Return PERMISSION_DENIED)
-1. **Shadow Admin Escalation**: Authenticated user creates `/users/{uid}` with `{ uid, email, isAdmin: true, createdAt, updatedAt }` -> Rejected by `hasOnly` key allowlist.
+1. **Shadow Admin Escalation**: Authenticated user creates `/users/{uid}` with `{ uid, email, role: "admin", createdAt, updatedAt }` or `{ isAdmin: true }` -> Rejected (`incoming().role == 'customer'` and `hasOnly` key allowlist).
 2. **Cross-User Profile Read**: User A attempts `get` on `/users/{userB_uid}` -> Rejected (`!isOwner && !isAdmin`).
 3. **Unverified Email Spoof**: User with `email: "henrique123trindade@gmail.com"` and `email_verified: false` attempts write to `/products/test` -> Rejected (`email_verified == true` check).
 4. **Order Impersonation**: User A creates `/orders/ord1` with `userId: userB_uid` -> Rejected (`incoming().userId == request.auth.uid`).
@@ -22,3 +22,5 @@
 10. **ID Poisoning**: Attacker writes `/orders/${'a'.repeat(500)}` or `/products/bad$id` -> Rejected by `isValidId()`.
 11. **Oversized Array Exhaustion**: Attacker writes a product or order with `items.size() > 50` -> Rejected by array size check.
 12. **Client Timestamp Spoofing**: User creates `/orders/ord1` with backdated `createdAt` instead of `request.time` -> Rejected (`data.createdAt == request.time`).
+13. **Client Privilege Escalation**: Regular user updates `/users/{uid}` changing `role` to `'admin'` or writes `/admins/{uid}` -> Rejected by immutable customer role check and admin-only `/admins/{uid}` rule.
+

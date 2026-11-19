@@ -55,8 +55,15 @@ const RouteFallback: React.FC = () => (
 
 const StorefrontRouter: React.FC = () => {
   const { toastMessage, isBagOpen, isSearchOpen, isAdvisorOpen } = useStoreUI();
+  const [bagLoaded, setBagLoaded] = useState(false);
   const [locationUrl, setLocationUrl] = useState<string>(() => readCurrentLocationUrl());
   const [hasNavigated, setHasNavigated] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isBagOpen && !bagLoaded) {
+      setBagLoaded(true);
+    }
+  }, [isBagOpen, bagLoaded]);
 
   useEffect(() => {
     const parsed = parseNavigationTarget(
@@ -169,7 +176,7 @@ const StorefrontRouter: React.FC = () => {
 
       {!isAdminRoute && <Footer onNavigate={navigate} />}
 
-      {isBagOpen && (
+      {(isBagOpen || bagLoaded) && (
         <Suspense fallback={null}>
           <BagDrawer onNavigate={navigate} />
         </Suspense>

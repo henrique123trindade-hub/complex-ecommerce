@@ -337,7 +337,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
     <main className="bg-[#F1EEE8] text-[#171717] min-h-[75vh]">
       <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-10 md:py-14">
         {/* Demo mode notice */}
-        <div className="mb-8 border border-[#171717]/20 bg-[#EAE6DF] p-4 flex items-start gap-3">
+        <div className="mb-6 border border-[#171717]/20 bg-[#EAE6DF] p-4 flex items-start gap-3">
           <Info className="w-4 h-4 shrink-0 mt-0.5 text-[#171717]" />
           <div className="text-xs leading-relaxed">
             <strong className="font-mono-tabular uppercase tracking-[0.1em]">
@@ -346,6 +346,22 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
             Arquitetura preparada para integração futura via backend com Mercado Pago ou provedor Pix nacional. Nenhum dado de cartão é solicitado ou processado neste ambiente.
           </div>
         </div>
+
+        {user && !user.emailVerified && (
+          <div className="mb-8 border border-[#6A705C]/45 bg-[#EAE6DF]/70 p-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs leading-relaxed text-[#171717]/85">
+              Seu e-mail ainda não foi confirmado. Este pedido será registrado apenas nesta sessão até que você confirme seu e-mail em{' '}
+              <strong>Minha Conta</strong>.
+            </p>
+            <button
+              type="button"
+              onClick={() => onNavigate('/account')}
+              className="font-mono-tabular text-[11px] uppercase underline cursor-pointer"
+            >
+              Confirmar e-mail agora
+            </button>
+          </div>
+        )}
 
         <h1 className="font-display text-3xl md:text-4xl font-extrabold tracking-[-0.025em] pb-6 border-b border-[#171717]/12">
           Finalizar Pedido

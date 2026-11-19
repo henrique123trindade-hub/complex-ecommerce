@@ -85,10 +85,27 @@
         "email": { "type": "string", "maxLength": 160 },
         "cpf": { "type": "string", "maxLength": 20 },
         "phone": { "type": "string", "maxLength": 30 },
+        "role": { "type": "string", "enum": ["customer", "admin"] },
+        "authMethods": { "type": "array" },
+        "emailVerified": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "email", "createdAt", "updatedAt"]
+      "required": ["uid", "email", "role", "createdAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Verified administrator allowlist record keyed by immutable Firebase UID.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "email": { "type": "string", "maxLength": 160 },
+        "role": { "type": "string", "enum": ["admin"] },
+        "active": { "type": "boolean" },
+        "grantedBy": { "type": "string", "maxLength": 80 },
+        "grantedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "active", "grantedBy", "grantedAt"]
     },
     "UserAddress": {
       "title": "UserAddress",
@@ -197,6 +214,10 @@
     "/newsletter/{subscriberId}": {
       "schema": { "$ref": "#/entities/NewsletterSubscriber" },
       "description": "Newsletter signups: write-only create for visitors, read/manage restricted to admin."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Server/admin-managed RBAC allowlist keyed by user UID."
     }
   }
 }

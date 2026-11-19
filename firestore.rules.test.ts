@@ -5,14 +5,17 @@ import {
   validateNewsletterPayload,
   validateOrderPayload,
   validateProductPayload,
+  validateUserProfileCreatePayload,
+  validateUserProfileUpdatePayload,
 } from './src/lib/validation';
 
 const rulesSource = fs.readFileSync('./firestore.rules', 'utf-8');
 
-test('firestore.rules enforces default-deny catch-all and email_verified checks', () => {
+test('firestore.rules enforces default-deny catch-all, RBAC role guards, and email_verified checks', () => {
   assert.match(rulesSource, /match \/\{document=\*\*\} \{\s*allow read, write: if false;/);
   assert.match(rulesSource, /request\.auth\.token\.email_verified == true/);
   assert.match(rulesSource, /affectedKeys\(\)\.hasOnly/);
+  assert.match(rulesSource, /incoming\(\)\.role == 'customer'/);
 });
 
 test('Dirty Dozen payloads are rejected by blueprint validation', () => {
@@ -150,4 +153,35 @@ test('Dirty Dozen payloads are rejected by blueprint validation', () => {
     createdAt: 'now',
   });
   assert.equal(noConsent.valid, false);
+
+  // 7. Client privilege escalation on signup/profile update rejected
+  const selfAdminCreate = validateUserProfileCreatePayload(
+    {
+      uid: 'user-a',
+      email: 'cliente@exemplo.com',
+      role: 'admin',
+      createdAt: 'now',
+      updatedAt: 'now',
+    },
+    'user-a',
+    true
+  );
+  assert.equal(selfAdminCreate.valid, false);
+
+  const validCustomerCreate = validateUserProfileCreatePayload(
+    {
+      uid: 'user-a',
+      email: 'cliente@exemplo.com',
+      role: 'customer',
+      createdAt: 'now',
+      updatedAt: 'now',
+    },
+    'user-a',
+    true
+  );
+  assert.equal(validCustomerCreate.valid, true);
+
+  assert.equal(validateUserProfileUpdatePayload('customer', 'admin', false).valid, false);
+  assert.equal(validateUserProfileUpdatePayload(undefined, 'customer', false).valid, true);
+  assert.equal(validateUserProfileUpdatePayload('customer', 'admin', true).valid, true);
 });
