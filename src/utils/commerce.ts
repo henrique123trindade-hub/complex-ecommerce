@@ -1,4 +1,6 @@
-import type { CartItem, CatalogFilters, Product, ShippingQuote } from '../types/store';
+import type { CartItem, CatalogFilters, OrderStatus, Product, ShippingQuote } from '../types/store';
+
+export const FREE_SHIPPING_THRESHOLD_BRL = 550;
 
 export const CATEGORY_LABELS: Record<string, string> = {
   ALL: 'Todos',
@@ -9,8 +11,41 @@ export const CATEGORY_LABELS: Record<string, string> = {
   Accessories: 'Acessórios',
 };
 
+export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  demo_pending: 'Aguardando pagamento',
+  confirmed: 'Confirmado',
+  preparing: 'Em separação',
+  shipped: 'Enviado',
+  delivered: 'Entregue',
+  cancelled: 'Cancelado',
+};
+
 export function getCategoryLabel(category: string): string {
   return CATEGORY_LABELS[category] || category;
+}
+
+export function getOrderStatusLabel(status: OrderStatus | string): string {
+  return ORDER_STATUS_LABELS[status as OrderStatus] || status;
+}
+
+export function getFreeShippingProgress(subtotalBrl: number): {
+  eligible: boolean;
+  remainingBrl: number;
+  percent: number;
+} {
+  const safeSubtotal = Math.max(0, Number.isFinite(subtotalBrl) ? subtotalBrl : 0);
+  const remainingBrl = Math.max(0, Number((FREE_SHIPPING_THRESHOLD_BRL - safeSubtotal).toFixed(2)));
+  const percent = Math.min(100, Math.round((safeSubtotal / FREE_SHIPPING_THRESHOLD_BRL) * 100));
+  return {
+    eligible: remainingBrl === 0 && safeSubtotal > 0,
+    remainingBrl,
+    percent,
+  };
+}
+
+export function validateCheckoutEmail(email: string): boolean {
+  const trimmed = email.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmed) && trimmed.length <= 160;
 }
 
 export function formatBrl(value: number): string {
@@ -81,7 +116,7 @@ export function calculateShippingQuotes(cep: string, subtotalBrl: number): Shipp
   const pacDays = isSoutheast ? '4 a 6 dias úteis' : isSouthOrMidwest ? '6 a 9 dias úteis' : '8 a 12 dias úteis';
   const sedexDays = isSoutheast ? '1 a 3 dias úteis' : isSouthOrMidwest ? '2 a 4 dias úteis' : '3 a 6 dias úteis';
 
-  const freeStandardEligible = subtotalBrl >= 550;
+  const freeStandardEligible = subtotalBrl >= FREE_SHIPPING_THRESHOLD_BRL;
 
   return [
     {

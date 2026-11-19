@@ -1,15 +1,16 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
 import { STORE_ASSETS } from '../data/assets';
-import { useStore } from '../context/StoreContext';
+import { useCatalog } from '../context/StoreContext';
 import { OptimizedImage } from '../components/OptimizedImage';
+import { Reveal } from '../components/Reveal';
 
 interface AboutPageProps {
   onNavigate: (path: string) => void;
 }
 
 export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
-  const { editorial } = useStore();
+  const { editorial } = useCatalog();
 
   return (
     <main className="bg-[#F1EEE8] text-[#171717]">
@@ -22,15 +23,15 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
         </h1>
       </section>
 
-      <section className="max-w-[1440px] mx-auto px-4 md:px-8 py-14 md:py-20 grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-        <div className="lg:col-span-6 aspect-[4/5] bg-[#EAE6DF] overflow-hidden">
+      <Reveal as="section" className="max-w-[1440px] mx-auto px-4 md:px-8 py-14 md:py-20 grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+        <div className="group lg:col-span-6 aspect-[4/5] bg-[#EAE6DF] overflow-hidden">
           <OptimizedImage
             src={STORE_ASSETS.editorialOuterwear.url}
             alt={STORE_ASSETS.editorialOuterwear.alt}
             sizes="split"
             priority
             className="w-full h-full"
-            imgClassName="w-full h-full object-cover object-top"
+            imgClassName="product-hover-zoom w-full h-full object-cover object-top group-hover:scale-[1.025]"
           />
         </div>
 
@@ -47,13 +48,13 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
             </p>
           </div>
 
-          <div className="aspect-[4/3] bg-[#EAE6DF] overflow-hidden">
+          <div className="group aspect-[4/3] bg-[#EAE6DF] overflow-hidden">
             <OptimizedImage
               src={STORE_ASSETS.detailCotton.url}
               alt={STORE_ASSETS.detailCotton.alt}
               sizes="split"
               className="w-full h-full"
-              imgClassName="w-full h-full object-cover"
+              imgClassName="product-hover-zoom w-full h-full object-cover group-hover:scale-[1.03]"
             />
           </div>
 
@@ -75,13 +76,13 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
           <button
             type="button"
             onClick={() => onNavigate('/shop')}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.14em] hover:bg-[#171717]/90 cursor-pointer"
+            className="group inline-flex items-center gap-2 px-6 py-3 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.14em] hover:bg-[#171717]/88 active:scale-[0.99] transition-[background-color,transform] duration-200 cursor-pointer"
           >
             <span>Explorar Coleção 01</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform duration-200" />
           </button>
         </div>
-      </section>
+      </Reveal>
     </main>
   );
 };

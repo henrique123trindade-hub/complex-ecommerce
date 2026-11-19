@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { LogOut, MapPin, Package, Plus, Trash2 } from 'lucide-react';
-import { useStore } from '../context/StoreContext';
+import { useAuth, useStoreUI } from '../context/StoreContext';
 import type { BrazilianAddress, OrderRecord } from '../types/store';
-import { formatBrl, formatCep, formatCpf } from '../utils/commerce';
+import { formatBrl, formatCep, formatCpf, getOrderStatusLabel, validateCep } from '../utils/commerce';
 import { formatFirebaseAuthError } from '../utils/authErrors';
 
 interface AccountPageProps {
@@ -23,8 +23,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
     deleteAddress,
     fetchUserOrders,
     getDemoOrders,
-    showToast,
-  } = useStore();
+  } = useAuth();
+  const { showToast } = useStoreUI();
 
   const [displayName, setDisplayName] = useState('');
   const [cpf, setCpf] = useState('');
@@ -42,7 +42,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
   const [addrState, setAddrState] = useState('');
 
   const [orders, setOrders] = useState<OrderRecord[]>([]);
-  const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [authError, setAuthError] = useState('');
 
   useEffect(() => {
@@ -78,6 +78,29 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
     await saveUserProfile({ displayName, cpf, phone });
   };
 
+  const handleAddressCepChange = async (value: string) => {
+    const formatted = formatCep(value);
+    setAddrCep(formatted);
+    if (!validateCep(formatted)) return;
+    try {
+      const res = await fetch(`/api/cep/${formatted.replace(/\D/g, '')}`);
+      if (res.ok) {
+        const data = (await res.json()) as {
+          street?: string;
+          neighborhood?: string;
+          city?: string;
+          state?: string;
+        };
+        if (data.street) setAddrStreet(data.street);
+        if (data.neighborhood) setAddrNeighborhood(data.neighborhood);
+        if (data.city) setAddrCity(data.city);
+        if (data.state) setAddrState(data.state);
+      }
+    } catch {
+      // Allow manual completion
+    }
+  };
+
   const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     const id = `addr-${Date.now()}`;
@@ -96,8 +119,12 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
     const updated = await fetchAddresses();
     setAddresses(updated);
     setNewAddressOpen(false);
+    setAddrCep('');
     setAddrStreet('');
     setAddrNumber('');
+    setAddrNeighborhood('');
+    setAddrCity('');
+    setAddrState('');
     showToast('Endereço salvo na sua conta.');
   };
 
@@ -133,7 +160,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
                 <button
                   type="button"
                   onClick={() => onNavigate('/admin')}
-                  className="px-4 py-2 border border-[#6A705C] text-[#6A705C] font-mono-tabular text-xs uppercase tracking-[0.12em] cursor-pointer"
+                  className="px-4 py-2 border border-[#6A705C] text-[#6A705C] font-mono-tabular text-xs uppercase tracking-[0.12em] hover:bg-[#6A705C]/10 transition-colors cursor-pointer"
                 >
                   Acessar Painel Admin
                 </button>
@@ -141,7 +168,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
               <button
                 type="button"
                 onClick={() => void logout()}
-                className="inline-flex items-center gap-2 px-4 py-2 border border-[#171717]/25 font-mono-tabular text-xs uppercase tracking-[0.12em] hover:border-[#171717] cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2 border border-[#171717]/25 font-mono-tabular text-xs uppercase tracking-[0.12em] hover:border-[#171717] transition-colors cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>Sair</span>
@@ -164,7 +191,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
                 <button
                   type="button"
                   onClick={() => void handleSignIn()}
-                  className="w-full h-12 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.14em] hover:bg-[#171717]/90 cursor-pointer"
+                  className="w-full h-12 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.14em] hover:bg-[#171717]/88 active:scale-[0.99] transition-[background-color,transform] duration-200 cursor-pointer"
                 >
                   Entrar / Cadastrar com Google
                 </button>
@@ -188,14 +215,17 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
               ) : (
                 <div className="space-y-3">
                   {orders.map((ord) => (
-                    <div key={ord.id} className="border border-[#171717]/15 p-4 flex items-center justify-between">
+                    <div key={ord.id} className="border border-[#171717]/15 p-4 flex items-center justify-between gap-4">
                       <div>
                         <p className="font-mono-tabular text-sm font-medium">{ord.orderNumber}</p>
                         <p className="text-xs text-[#99968F]">
-                          Pedido Demo Local · {ord.items.length} item(ns)
+                          {getOrderStatusLabel(ord.status)} · {ord.items.length}{' '}
+                          {ord.items.length === 1 ? 'item' : 'itens'}
                         </p>
                       </div>
-                      <span className="font-mono-tabular text-sm">{formatBrl(ord.totalBrl)}</span>
+                      <span className="font-mono-tabular text-sm font-medium">
+                        {formatBrl(ord.totalBrl)}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -217,7 +247,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    className="w-full h-10 px-3 bg-transparent border border-[#171717]/20 text-sm"
+                    className="w-full h-10 px-3 bg-transparent border border-[#171717]/20 text-sm focus:outline-none focus:border-[#171717] transition-colors"
                   />
                 </div>
                 <div>
@@ -239,7 +269,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
                       value={cpf}
                       onChange={(e) => setCpf(formatCpf(e.target.value))}
                       placeholder="000.000.000-00"
-                      className="w-full h-10 px-3 bg-transparent border border-[#171717]/20 font-mono-tabular text-xs"
+                      className="w-full h-10 px-3 bg-transparent border border-[#171717]/20 font-mono-tabular text-xs focus:outline-none focus:border-[#171717] transition-colors"
                     />
                   </div>
                   <div>
@@ -250,13 +280,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="(11) 99999-9999"
-                      className="w-full h-10 px-3 bg-transparent border border-[#171717]/20 font-mono-tabular text-xs"
+                      className="w-full h-10 px-3 bg-transparent border border-[#171717]/20 font-mono-tabular text-xs focus:outline-none focus:border-[#171717] transition-colors"
                     />
                   </div>
                 </div>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] cursor-pointer"
+                  className="px-5 py-2.5 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] hover:bg-[#171717]/88 transition-colors cursor-pointer"
                 >
                   Salvar Perfil
                 </button>
@@ -272,93 +302,96 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
                   <button
                     type="button"
                     onClick={() => setNewAddressOpen((v) => !v)}
-                    className="inline-flex items-center gap-1 font-mono-tabular text-[11px] uppercase underline cursor-pointer"
+                    aria-expanded={newAddressOpen}
+                    className="inline-flex items-center gap-1 font-mono-tabular text-[11px] uppercase underline underline-offset-4 hover:opacity-70 transition-opacity cursor-pointer"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Adicionar</span>
+                    <Plus className={`w-3.5 h-3.5 transition-transform duration-200 ${newAddressOpen ? 'rotate-45' : ''}`} />
+                    <span>{newAddressOpen ? 'Fechar' : 'Adicionar'}</span>
                   </button>
                 </div>
 
-                {newAddressOpen && (
-                  <form onSubmit={handleAddAddress} className="space-y-3 pt-2 border-t border-[#171717]/10">
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        placeholder="Etiqueta (Casa, Trabalho)"
-                        value={addrLabel}
-                        onChange={(e) => setAddrLabel(e.target.value)}
-                        className="h-9 px-2.5 bg-transparent border border-[#171717]/20 text-xs"
-                      />
-                      <input
-                        type="text"
-                        required
-                        placeholder="CEP"
-                        value={addrCep}
-                        onChange={(e) => setAddrCep(formatCep(e.target.value))}
-                        className="h-9 px-2.5 bg-transparent border border-[#171717]/20 font-mono-tabular text-xs"
-                      />
-                    </div>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Destinatário"
-                      value={addrRecipient}
-                      onChange={(e) => setAddrRecipient(e.target.value)}
-                      className="w-full h-9 px-2.5 bg-transparent border border-[#171717]/20 text-xs"
-                    />
-                    <div className="grid grid-cols-3 gap-2">
+                <div className="accordion-panel" data-open={newAddressOpen ? 'true' : 'false'}>
+                  <div>
+                    <form onSubmit={handleAddAddress} className="space-y-3 pt-2 border-t border-[#171717]/10">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          placeholder="Etiqueta (Casa, Trabalho)"
+                          value={addrLabel}
+                          onChange={(e) => setAddrLabel(e.target.value)}
+                          className="h-9 px-2.5 bg-transparent border border-[#171717]/20 text-xs focus:outline-none focus:border-[#171717]"
+                        />
+                        <input
+                          type="text"
+                          required
+                          placeholder="CEP"
+                          value={addrCep}
+                          onChange={(e) => void handleAddressCepChange(e.target.value)}
+                          className="h-9 px-2.5 bg-transparent border border-[#171717]/20 font-mono-tabular text-xs focus:outline-none focus:border-[#171717]"
+                        />
+                      </div>
                       <input
                         type="text"
                         required
-                        placeholder="Rua / Av."
-                        value={addrStreet}
-                        onChange={(e) => setAddrStreet(e.target.value)}
-                        className="col-span-2 h-9 px-2.5 bg-transparent border border-[#171717]/20 text-xs"
+                        placeholder="Destinatário"
+                        value={addrRecipient}
+                        onChange={(e) => setAddrRecipient(e.target.value)}
+                        className="w-full h-9 px-2.5 bg-transparent border border-[#171717]/20 text-xs focus:outline-none focus:border-[#171717]"
                       />
-                      <input
-                        type="text"
-                        required
-                        placeholder="Nº"
-                        value={addrNumber}
-                        onChange={(e) => setAddrNumber(e.target.value)}
-                        className="h-9 px-2.5 bg-transparent border border-[#171717]/20 text-xs"
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <input
-                        type="text"
-                        required
-                        placeholder="Bairro"
-                        value={addrNeighborhood}
-                        onChange={(e) => setAddrNeighborhood(e.target.value)}
-                        className="h-9 px-2.5 bg-transparent border border-[#171717]/20 text-xs"
-                      />
-                      <input
-                        type="text"
-                        required
-                        placeholder="Cidade"
-                        value={addrCity}
-                        onChange={(e) => setAddrCity(e.target.value)}
-                        className="h-9 px-2.5 bg-transparent border border-[#171717]/20 text-xs"
-                      />
-                      <input
-                        type="text"
-                        required
-                        maxLength={2}
-                        placeholder="UF"
-                        value={addrState}
-                        onChange={(e) => setAddrState(e.target.value.toUpperCase())}
-                        className="h-9 px-2.5 bg-transparent border border-[#171717]/20 font-mono-tabular text-xs uppercase"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-[11px] uppercase cursor-pointer"
-                    >
-                      Salvar Endereço
-                    </button>
-                  </form>
-                )}
+                      <div className="grid grid-cols-3 gap-2">
+                        <input
+                          type="text"
+                          required
+                          placeholder="Rua / Av."
+                          value={addrStreet}
+                          onChange={(e) => setAddrStreet(e.target.value)}
+                          className="col-span-2 h-9 px-2.5 bg-transparent border border-[#171717]/20 text-xs focus:outline-none focus:border-[#171717]"
+                        />
+                        <input
+                          type="text"
+                          required
+                          placeholder="Nº"
+                          value={addrNumber}
+                          onChange={(e) => setAddrNumber(e.target.value)}
+                          className="h-9 px-2.5 bg-transparent border border-[#171717]/20 text-xs focus:outline-none focus:border-[#171717]"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <input
+                          type="text"
+                          required
+                          placeholder="Bairro"
+                          value={addrNeighborhood}
+                          onChange={(e) => setAddrNeighborhood(e.target.value)}
+                          className="h-9 px-2.5 bg-transparent border border-[#171717]/20 text-xs focus:outline-none focus:border-[#171717]"
+                        />
+                        <input
+                          type="text"
+                          required
+                          placeholder="Cidade"
+                          value={addrCity}
+                          onChange={(e) => setAddrCity(e.target.value)}
+                          className="h-9 px-2.5 bg-transparent border border-[#171717]/20 text-xs focus:outline-none focus:border-[#171717]"
+                        />
+                        <input
+                          type="text"
+                          required
+                          maxLength={2}
+                          placeholder="UF"
+                          value={addrState}
+                          onChange={(e) => setAddrState(e.target.value.toUpperCase())}
+                          className="h-9 px-2.5 bg-transparent border border-[#171717]/20 font-mono-tabular text-xs uppercase focus:outline-none focus:border-[#171717]"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-[11px] uppercase hover:bg-[#171717]/88 transition-colors cursor-pointer"
+                      >
+                        Salvar Endereço
+                      </button>
+                    </form>
+                  </div>
+                </div>
 
                 <div className="space-y-3">
                   {addresses.map((addr) => (
@@ -378,7 +411,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
                         type="button"
                         onClick={() => void handleRemoveAddress(addr.id)}
                         aria-label={`Remover endereço ${addr.label}`}
-                        className="text-[#99968F] hover:text-[#171717] cursor-pointer"
+                        className="text-[#99968F] hover:text-[#171717] transition-colors cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -404,60 +437,64 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
                   <button
                     type="button"
                     onClick={() => onNavigate('/shop')}
-                    className="px-5 py-2.5 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] cursor-pointer"
+                    className="px-5 py-2.5 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] hover:bg-[#171717]/88 transition-colors cursor-pointer"
                   >
                     Explorar catálogo
                   </button>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {orders.map((ord) => (
-                    <div key={ord.id} className="border border-[#171717]/15 p-5 space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <span className="font-mono-tabular text-sm font-medium">
-                            {ord.orderNumber}
-                          </span>
-                          <span className="ml-3 font-mono-tabular text-[11px] uppercase text-[#99968F]">
-                            {ord.status} {ord.isDemo ? '(Demo)' : ''}
-                          </span>
+                  {orders.map((ord) => {
+                    const isOpen = selectedOrderId === ord.id;
+                    return (
+                      <div key={ord.id} className="border border-[#171717]/15 p-5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <span className="font-mono-tabular text-sm font-medium">
+                              {ord.orderNumber}
+                            </span>
+                            <span className="ml-3 font-mono-tabular text-[11px] uppercase text-[#99968F]">
+                              {getOrderStatusLabel(ord.status)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="font-mono-tabular text-sm font-medium">
+                              {formatBrl(ord.totalBrl)}
+                            </span>
+                            <button
+                              type="button"
+                              aria-expanded={isOpen}
+                              onClick={() => setSelectedOrderId(isOpen ? null : ord.id)}
+                              className="font-mono-tabular text-[11px] uppercase underline underline-offset-4 hover:opacity-70 transition-opacity cursor-pointer"
+                            >
+                              {isOpen ? 'Ocultar' : 'Detalhes'}
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                          <span className="font-mono-tabular text-sm font-medium">
-                            {formatBrl(ord.totalBrl)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSelectedOrder(selectedOrder?.id === ord.id ? null : ord)
-                            }
-                            className="font-mono-tabular text-[11px] uppercase underline cursor-pointer"
-                          >
-                            {selectedOrder?.id === ord.id ? 'Ocultar' : 'Detalhes'}
-                          </button>
+
+                        <div className="accordion-panel" data-open={isOpen ? 'true' : 'false'}>
+                          <div>
+                            <div className="pt-3 mt-3 border-t border-[#171717]/10 space-y-2 text-xs">
+                              {ord.items.map((it, idx) => (
+                                <div key={idx} className="flex justify-between">
+                                  <span>
+                                    {it.quantity}x {it.name} ({it.colorName}, Tam {it.size})
+                                  </span>
+                                  <span className="font-mono-tabular">
+                                    {formatBrl(it.unitPriceBrl * it.quantity)}
+                                  </span>
+                                </div>
+                              ))}
+                              <p className="text-[#99968F] pt-1">
+                                Entrega: {ord.shippingAddress.street}, {ord.shippingAddress.number} —{' '}
+                                {ord.shippingAddress.city}/{ord.shippingAddress.state}
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       </div>
-
-                      {selectedOrder?.id === ord.id && (
-                        <div className="pt-3 border-t border-[#171717]/10 space-y-2 text-xs">
-                          {ord.items.map((it, idx) => (
-                            <div key={idx} className="flex justify-between">
-                              <span>
-                                {it.quantity}x {it.name} ({it.colorName}, Tam {it.size})
-                              </span>
-                              <span className="font-mono-tabular">
-                                {formatBrl(it.unitPriceBrl * it.quantity)}
-                              </span>
-                            </div>
-                          ))}
-                          <p className="text-[#99968F] pt-1">
-                            Entrega: {ord.shippingAddress.street}, {ord.shippingAddress.number} —{' '}
-                            {ord.shippingAddress.city}/{ord.shippingAddress.state}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

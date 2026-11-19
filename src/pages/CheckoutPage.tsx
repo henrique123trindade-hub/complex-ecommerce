@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check, Info } from 'lucide-react';
 import { useAuth, useCart, useCatalog } from '../context/StoreContext';
 import { OptimizedImage } from '../components/OptimizedImage';
+import { Breadcrumbs } from '../components/Breadcrumbs';
 import type { BrazilianAddress, CouponRecord, OrderRecord, ShippingQuote } from '../types/store';
 import {
   calculateCartTotals,
@@ -9,7 +10,9 @@ import {
   formatBrl,
   formatCep,
   formatCpf,
+  getFreeShippingProgress,
   validateCep,
+  validateCheckoutEmail,
   validateCpf,
 } from '../utils/commerce';
 
@@ -25,6 +28,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
   const [customerName, setCustomerName] = useState(userProfile?.displayName || user?.displayName || '');
   const [customerEmail, setCustomerEmail] = useState(userProfile?.email || user?.email || '');
   const [customerCpf, setCustomerCpf] = useState(userProfile?.cpf || '');
+  const prefilledProfileUidRef = useRef<string | null>(null);
 
   const [cep, setCep] = useState('');
   const [street, setStreet] = useState('');
@@ -34,6 +38,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
   const [city, setCity] = useState('');
   const [stateUf, setStateUf] = useState('');
 
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [savedAddresses, setSavedAddresses] = useState<BrazilianAddress[]>([]);
   const [shippingQuotes, setShippingQuotes] = useState<ShippingQuote[]>([]);
   const [selectedShippingId, setSelectedShippingId] = useState<string>('pac');
@@ -41,19 +46,27 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
   const [couponInput, setCouponInput] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<CouponRecord | null>(null);
   const [couponMessage, setCouponMessage] = useState('');
+  const [couponStatus, setCouponStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cartao'>('pix');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [confirmedOrder, setConfirmedOrder] = useState<OrderRecord | null>(null);
 
+  const markTouched = (field: string) =>
+    setTouched((prev) => (prev[field] ? prev : { ...prev, [field]: true }));
+
   useEffect(() => {
-    if (userProfile) {
-      if (!customerName) setCustomerName(userProfile.displayName || '');
-      if (!customerEmail) setCustomerEmail(userProfile.email || '');
-      if (!customerCpf && userProfile.cpf) setCustomerCpf(userProfile.cpf);
+    if (!userProfile) {
+      prefilledProfileUidRef.current = null;
+      return;
     }
-  }, [userProfile, customerName, customerEmail, customerCpf]);
+    if (prefilledProfileUidRef.current === userProfile.uid) return;
+    prefilledProfileUidRef.current = userProfile.uid;
+    setCustomerName((prev) => prev || userProfile.displayName || '');
+    setCustomerEmail((prev) => prev || userProfile.email || '');
+    setCustomerCpf((prev) => prev || userProfile.cpf || '');
+  }, [userProfile]);
 
   useEffect(() => {
     void refreshCatalog();
@@ -67,16 +80,22 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
     }
   }, [user, fetchAddresses]);
 
+  useEffect(() => {
+    if (!validateCep(cep)) {
+      setShippingQuotes([]);
+      return;
+    }
+    const quotes = calculateShippingQuotes(cep, cartSubtotal);
+    setShippingQuotes(quotes);
+    if (quotes.length > 0 && !quotes.some((q) => q.id === selectedShippingId)) {
+      setSelectedShippingId(quotes[0].id);
+    }
+  }, [cep, cartSubtotal, selectedShippingId]);
+
   const handleCepChange = async (value: string) => {
     const formatted = formatCep(value);
     setCep(formatted);
     if (validateCep(formatted)) {
-      const quotes = calculateShippingQuotes(formatted, cartSubtotal);
-      setShippingQuotes(quotes);
-      if (quotes.length > 0 && !quotes.some((q) => q.id === selectedShippingId)) {
-        setSelectedShippingId(quotes[0].id);
-      }
-
       try {
         const res = await fetch(`/api/cep/${formatted.replace(/\D/g, '')}`);
         if (res.ok) {
@@ -94,8 +113,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
       } catch {
         // User can fill manually
       }
-    } else {
-      setShippingQuotes([]);
     }
   };
 
@@ -112,18 +129,27 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
 
   const handleApplyCoupon = async () => {
     setCouponMessage('');
+    if (!couponInput.trim()) {
+      setAppliedCoupon(null);
+      setCouponStatus('error');
+      setCouponMessage('Informe um código de cupom.');
+      return;
+    }
     const coupon = await validateCoupon(couponInput);
     if (!coupon) {
       setAppliedCoupon(null);
+      setCouponStatus('error');
       setCouponMessage('Cupom inválido ou inativo.');
       return;
     }
     if (cartSubtotal < coupon.minOrderBrl) {
       setAppliedCoupon(null);
+      setCouponStatus('error');
       setCouponMessage(`Pedido mínimo de ${formatBrl(coupon.minOrderBrl)} para este cupom.`);
       return;
     }
     setAppliedCoupon(coupon);
+    setCouponStatus('success');
     setCouponMessage(`Cupom ${coupon.code} aplicado (${coupon.discountPercent}% de desconto).`);
   };
 
@@ -137,15 +163,47 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
     appliedCoupon?.minOrderBrl ?? 0
   );
 
+  const nameError =
+    touched.name && customerName.trim().length < 3
+      ? 'Informe seu nome completo.'
+      : '';
+  const emailError =
+    touched.email && !validateCheckoutEmail(customerEmail)
+      ? 'Informe um e-mail válido.'
+      : '';
+  const cpfError =
+    touched.cpf && !validateCpf(customerCpf)
+      ? 'CPF inválido. Verifique os 11 dígitos.'
+      : '';
+  const cepFieldError =
+    touched.cep && !validateCep(cep) ? 'Informe um CEP com 8 dígitos.' : '';
+  const ufError =
+    touched.uf && stateUf.trim().length !== 2 ? 'UF inválida.' : '';
+
+  const step1Done =
+    customerName.trim().length >= 3 &&
+    validateCheckoutEmail(customerEmail) &&
+    validateCpf(customerCpf);
+  const step2Done =
+    validateCep(cep) &&
+    street.trim().length > 0 &&
+    number.trim().length > 0 &&
+    neighborhood.trim().length > 0 &&
+    city.trim().length > 0 &&
+    stateUf.trim().length === 2;
+
+  const shippingProgress = getFreeShippingProgress(cartSubtotal);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+    setTouched({ name: true, email: true, cpf: true, cep: true, uf: true });
 
     if (cart.length === 0) {
       setFormError('Sua sacola está vazia.');
       return;
     }
-    if (!customerName.trim() || !customerEmail.includes('@')) {
+    if (customerName.trim().length < 3 || !validateCheckoutEmail(customerEmail)) {
       setFormError('Preencha nome completo e e-mail válido.');
       return;
     }
@@ -153,7 +211,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
       setFormError('Informe um CPF válido com 11 dígitos.');
       return;
     }
-    if (!validateCep(cep) || !street.trim() || !number.trim() || !neighborhood.trim() || !city.trim() || stateUf.trim().length !== 2) {
+    if (!step2Done) {
       setFormError('Preencha todos os campos do endereço brasileiro e CEP válido.');
       return;
     }
@@ -212,6 +270,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
       });
 
       setConfirmedOrder(created);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Erro ao registrar pedido demonstrativo.');
     } finally {
@@ -221,7 +280,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
 
   if (confirmedOrder) {
     return (
-      <main className="bg-[#F1EEE8] text-[#171717] min-h-[75vh]">
+      <main className="bg-[#F1EEE8] text-[#171717] min-h-[75vh] page-transition-enter">
         <div className="max-w-3xl mx-auto px-4 md:px-8 py-14 space-y-8">
           <div className="border border-[#6A705C] bg-[#6A705C]/10 p-4 flex items-start gap-3">
             <Check className="w-5 h-5 text-[#6A705C] shrink-0 mt-0.5" />
@@ -315,14 +374,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
               <button
                 type="button"
                 onClick={() => onNavigate('/account')}
-                className="px-6 py-3 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] cursor-pointer"
+                className="px-6 py-3 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] hover:bg-[#171717]/88 transition-colors cursor-pointer"
               >
                 Ver meus pedidos
               </button>
               <button
                 type="button"
                 onClick={() => onNavigate('/shop')}
-                className="px-6 py-3 border border-[#171717] font-mono-tabular text-xs uppercase tracking-[0.12em] cursor-pointer"
+                className="px-6 py-3 border border-[#171717] font-mono-tabular text-xs uppercase tracking-[0.12em] hover:bg-[#171717]/6 transition-colors cursor-pointer"
               >
                 Voltar à loja
               </button>
@@ -335,7 +394,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
 
   return (
     <main className="bg-[#F1EEE8] text-[#171717] min-h-[75vh]">
-      <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-10 md:py-14">
+      <Breadcrumbs
+        items={[
+          { label: 'Início', path: '/' },
+          { label: 'Sacola', path: '/bag' },
+          { label: 'Checkout', path: '/checkout' },
+        ]}
+        onNavigate={onNavigate}
+        rightMeta="CHECKOUT DEMO"
+      />
+
+      <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-8 md:py-12">
         {/* Demo mode notice */}
         <div className="mb-8 border border-[#171717]/20 bg-[#EAE6DF] p-4 flex items-start gap-3">
           <Info className="w-4 h-4 shrink-0 mt-0.5 text-[#171717]" />
@@ -347,9 +416,25 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
           </div>
         </div>
 
-        <h1 className="font-display text-3xl md:text-4xl font-extrabold tracking-[-0.025em] pb-6 border-b border-[#171717]/12">
-          Finalizar Pedido
-        </h1>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-[#171717]/12">
+          <h1 className="font-display text-3xl md:text-4xl font-extrabold tracking-[-0.025em]">
+            Finalizar Pedido
+          </h1>
+
+          {cart.length > 0 && (
+            <div className="flex items-center gap-4 font-mono-tabular text-[11px] uppercase tracking-[0.12em]">
+              <span className={step1Done ? 'text-[#6A705C] font-medium' : 'text-[#171717]'}>
+                {step1Done ? '✓ ' : ''}01 Dados
+              </span>
+              <span className="text-[#99968F]">/</span>
+              <span className={step2Done ? 'text-[#6A705C] font-medium' : 'text-[#99968F]'}>
+                {step2Done ? '✓ ' : ''}02 Entrega
+              </span>
+              <span className="text-[#99968F]">/</span>
+              <span className="text-[#99968F]">03 Pagamento</span>
+            </div>
+          )}
+        </div>
 
         {cart.length === 0 ? (
           <div className="py-20 text-center space-y-4">
@@ -357,13 +442,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
             <button
               type="button"
               onClick={() => onNavigate('/shop')}
-              className="px-6 py-3 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] cursor-pointer"
+              className="px-6 py-3 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] hover:bg-[#171717]/88 transition-colors cursor-pointer"
             >
               Explorar catálogo
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-10 pt-8">
+          <form onSubmit={handleSubmit} noValidate className="grid grid-cols-1 lg:grid-cols-12 gap-10 pt-8">
             <div className="lg:col-span-7 space-y-8">
               {/* 1. Dados Pessoais */}
               <section className="space-y-4">
@@ -381,8 +466,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                       required
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 text-sm focus:outline-none focus:border-[#171717]"
+                      onBlur={() => markTouched('name')}
+                      aria-invalid={Boolean(nameError)}
+                      className={`w-full h-11 px-3.5 bg-transparent border text-sm focus:outline-none transition-colors ${
+                        nameError
+                          ? 'border-[#8A2C2C] focus:border-[#8A2C2C]'
+                          : 'border-[#171717]/25 focus:border-[#171717]'
+                      }`}
                     />
+                    {nameError && <p className="mt-1 text-[11px] text-[#8A2C2C]">{nameError}</p>}
                   </div>
                   <div>
                     <label htmlFor="chk-email" className="block text-xs mb-1.5">
@@ -394,8 +486,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                       required
                       value={customerEmail}
                       onChange={(e) => setCustomerEmail(e.target.value)}
-                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 text-sm focus:outline-none focus:border-[#171717]"
+                      onBlur={() => markTouched('email')}
+                      aria-invalid={Boolean(emailError)}
+                      className={`w-full h-11 px-3.5 bg-transparent border text-sm focus:outline-none transition-colors ${
+                        emailError
+                          ? 'border-[#8A2C2C] focus:border-[#8A2C2C]'
+                          : 'border-[#171717]/25 focus:border-[#171717]'
+                      }`}
                     />
+                    {emailError && <p className="mt-1 text-[11px] text-[#8A2C2C]">{emailError}</p>}
                   </div>
                   <div>
                     <label htmlFor="chk-cpf" className="block text-xs mb-1.5">
@@ -407,16 +506,23 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                       required
                       value={customerCpf}
                       onChange={(e) => setCustomerCpf(formatCpf(e.target.value))}
+                      onBlur={() => markTouched('cpf')}
+                      aria-invalid={Boolean(cpfError)}
                       placeholder="000.000.000-00"
-                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 font-mono-tabular text-sm focus:outline-none focus:border-[#171717]"
+                      className={`w-full h-11 px-3.5 bg-transparent border font-mono-tabular text-sm focus:outline-none transition-colors ${
+                        cpfError
+                          ? 'border-[#8A2C2C] focus:border-[#8A2C2C]'
+                          : 'border-[#171717]/25 focus:border-[#171717]'
+                      }`}
                     />
+                    {cpfError && <p className="mt-1 text-[11px] text-[#8A2C2C]">{cpfError}</p>}
                   </div>
                 </div>
               </section>
 
               {/* 2. Endereço Brasileiro */}
               <section className="space-y-4 pt-6 border-t border-[#171717]/12">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <h2 className="font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#99968F]">
                     02 / Endereço de Entrega
                   </h2>
@@ -428,7 +534,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                         if (found) applySavedAddress(found);
                       }}
                       defaultValue=""
-                      className="h-8 px-2 bg-[#F1EEE8] border border-[#171717]/20 text-xs"
+                      className="h-8 px-2 bg-[#F1EEE8] border border-[#171717]/20 text-xs focus:outline-none focus:border-[#171717]"
                     >
                       <option value="" disabled>
                         Usar endereço salvo...
@@ -453,9 +559,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                       required
                       value={cep}
                       onChange={(e) => void handleCepChange(e.target.value)}
+                      onBlur={() => markTouched('cep')}
+                      aria-invalid={Boolean(cepFieldError)}
                       placeholder="00000-000"
-                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 font-mono-tabular text-sm focus:outline-none focus:border-[#171717]"
+                      className={`w-full h-11 px-3.5 bg-transparent border font-mono-tabular text-sm focus:outline-none transition-colors ${
+                        cepFieldError
+                          ? 'border-[#8A2C2C] focus:border-[#8A2C2C]'
+                          : 'border-[#171717]/25 focus:border-[#171717]'
+                      }`}
                     />
+                    {cepFieldError && (
+                      <p className="mt-1 text-[11px] text-[#8A2C2C]">{cepFieldError}</p>
+                    )}
                   </div>
 
                   <div className="sm:col-span-4">
@@ -468,7 +583,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                       required
                       value={street}
                       onChange={(e) => setStreet(e.target.value)}
-                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 text-sm focus:outline-none focus:border-[#171717]"
+                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 text-sm focus:outline-none focus:border-[#171717] transition-colors"
                     />
                   </div>
 
@@ -482,7 +597,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                       required
                       value={number}
                       onChange={(e) => setNumber(e.target.value)}
-                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 text-sm focus:outline-none focus:border-[#171717]"
+                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 text-sm focus:outline-none focus:border-[#171717] transition-colors"
                     />
                   </div>
 
@@ -495,7 +610,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                       type="text"
                       value={complement}
                       onChange={(e) => setComplement(e.target.value)}
-                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 text-sm focus:outline-none focus:border-[#171717]"
+                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 text-sm focus:outline-none focus:border-[#171717] transition-colors"
                     />
                   </div>
 
@@ -509,7 +624,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                       required
                       value={neighborhood}
                       onChange={(e) => setNeighborhood(e.target.value)}
-                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 text-sm focus:outline-none focus:border-[#171717]"
+                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 text-sm focus:outline-none focus:border-[#171717] transition-colors"
                     />
                   </div>
 
@@ -523,7 +638,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                       required
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
-                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 text-sm focus:outline-none focus:border-[#171717]"
+                      className="w-full h-11 px-3.5 bg-transparent border border-[#171717]/25 text-sm focus:outline-none focus:border-[#171717] transition-colors"
                     />
                   </div>
 
@@ -538,8 +653,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                       maxLength={2}
                       value={stateUf}
                       onChange={(e) => setStateUf(e.target.value.toUpperCase())}
+                      onBlur={() => markTouched('uf')}
+                      aria-invalid={Boolean(ufError)}
                       placeholder="SP"
-                      className="w-full h-11 px-3 bg-transparent border border-[#171717]/25 font-mono-tabular uppercase text-sm focus:outline-none focus:border-[#171717]"
+                      className={`w-full h-11 px-3 bg-transparent border font-mono-tabular uppercase text-sm focus:outline-none transition-colors ${
+                        ufError
+                          ? 'border-[#8A2C2C] focus:border-[#8A2C2C]'
+                          : 'border-[#171717]/25 focus:border-[#171717]'
+                      }`}
                     />
                   </div>
                 </div>
@@ -547,7 +668,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
 
               {/* 3. Entrega */}
               {shippingQuotes.length > 0 && (
-                <section className="space-y-3 pt-6 border-t border-[#171717]/12">
+                <section className="space-y-3 pt-6 border-t border-[#171717]/12 cart-item-enter">
                   <h2 className="font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#99968F]">
                     03 / Opções de Entrega (Configuráveis)
                   </h2>
@@ -555,10 +676,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                     {shippingQuotes.map((quote) => (
                       <label
                         key={quote.id}
-                        className={`flex items-center justify-between p-4 border cursor-pointer ${
+                        className={`flex items-center justify-between p-4 border transition-colors cursor-pointer ${
                           selectedShippingId === quote.id
                             ? 'border-[#171717] bg-[#EAE6DF]/60'
-                            : 'border-[#171717]/20'
+                            : 'border-[#171717]/20 hover:border-[#171717]/50'
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -592,10 +713,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('pix')}
-                    className={`p-4 border text-left cursor-pointer ${
+                    className={`p-4 border text-left transition-colors cursor-pointer ${
                       paymentMethod === 'pix'
                         ? 'border-[#171717] bg-[#171717] text-[#F1EEE8]'
-                        : 'border-[#171717]/25'
+                        : 'border-[#171717]/25 hover:border-[#171717]'
                     }`}
                   >
                     <p className="font-mono-tabular text-xs uppercase tracking-[0.12em]">Pix</p>
@@ -605,10 +726,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('cartao')}
-                    className={`p-4 border text-left cursor-pointer ${
+                    className={`p-4 border text-left transition-colors cursor-pointer ${
                       paymentMethod === 'cartao'
                         ? 'border-[#171717] bg-[#171717] text-[#F1EEE8]'
-                        : 'border-[#171717]/25'
+                        : 'border-[#171717]/25 hover:border-[#171717]'
                     }`}
                   >
                     <p className="font-mono-tabular text-xs uppercase tracking-[0.12em]">Cartão de Crédito</p>
@@ -627,9 +748,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
             {/* Order Summary Sidebar */}
             <aside className="lg:col-span-5">
               <div className="border border-[#171717]/15 bg-[#EAE6DF]/55 p-6 space-y-5 lg:sticky lg:top-24">
-                <h2 className="font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#99968F]">
-                  Resumo do Pedido ({totals.itemCount})
-                </h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#99968F]">
+                    Resumo do Pedido ({totals.itemCount})
+                  </h2>
+                  {shippingProgress.eligible && (
+                    <span className="font-mono-tabular text-[10px] uppercase tracking-[0.1em] text-[#6A705C]">
+                      Frete grátis ativo
+                    </span>
+                  )}
+                </div>
 
                 <div className="divide-y divide-[#171717]/10 max-h-72 overflow-y-auto">
                   {cart.map((item) => (
@@ -664,19 +792,34 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                       id="chk-coupon"
                       type="text"
                       value={couponInput}
-                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      onChange={(e) => {
+                        setCouponInput(e.target.value.toUpperCase());
+                        if (couponStatus !== 'idle') {
+                          setCouponStatus('idle');
+                          setCouponMessage('');
+                        }
+                      }}
                       placeholder="Cupom (ex: COMPLEX10)"
-                      className="flex-1 h-10 px-3 bg-[#F1EEE8] border border-[#171717]/20 font-mono-tabular text-xs uppercase focus:outline-none"
+                      className="flex-1 h-10 px-3 bg-[#F1EEE8] border border-[#171717]/20 font-mono-tabular text-xs uppercase focus:outline-none focus:border-[#171717] transition-colors"
                     />
                     <button
                       type="button"
                       onClick={() => void handleApplyCoupon()}
-                      className="h-10 px-4 border border-[#171717] font-mono-tabular text-[11px] uppercase tracking-[0.12em] cursor-pointer"
+                      className="h-10 px-4 border border-[#171717] font-mono-tabular text-[11px] uppercase tracking-[0.12em] hover:bg-[#171717]/6 transition-colors cursor-pointer"
                     >
                       Aplicar
                     </button>
                   </div>
-                  {couponMessage && <p className="text-xs text-[#6A705C]">{couponMessage}</p>}
+                  {couponMessage && (
+                    <p
+                      className={`text-xs ${
+                        couponStatus === 'error' ? 'text-[#8A2C2C]' : 'text-[#6A705C]'
+                      }`}
+                      role="status"
+                    >
+                      {couponMessage}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2 text-sm border-t border-[#171717]/12 pt-4">
@@ -710,7 +853,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                 </div>
 
                 {formError && (
-                  <p className="text-xs text-[#8A2C2C] border border-[#8A2C2C]/30 bg-[#8A2C2C]/5 p-3">
+                  <p
+                    role="alert"
+                    className="text-xs text-[#8A2C2C] border border-[#8A2C2C]/30 bg-[#8A2C2C]/5 p-3"
+                  >
                     {formError}
                   </p>
                 )}
@@ -718,7 +864,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full h-12 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.14em] hover:bg-[#171717]/90 disabled:opacity-50 cursor-pointer"
+                  className="w-full h-12 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.14em] hover:bg-[#171717]/88 active:scale-[0.99] disabled:opacity-50 transition-[background-color,transform] duration-200 cursor-pointer"
                 >
                   {submitting ? 'Registrando pedido...' : 'Confirmar Pedido (Modo Demo)'}
                 </button>

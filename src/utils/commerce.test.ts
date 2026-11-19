@@ -181,3 +181,63 @@ test('validateCartAgainstCatalog catches stale prices, stock drops, and removed 
   assert.equal(result.adjustedCart[0].quantity, 4);
   assert.equal(result.adjustedCart[0].maxStock, 4);
 });
+
+test('getOrderStatusLabel returns localized Portuguese labels for all order statuses', async () => {
+  const { getOrderStatusLabel } = await import('./commerce');
+  assert.equal(getOrderStatusLabel('demo_pending'), 'Aguardando pagamento');
+  assert.equal(getOrderStatusLabel('confirmed'), 'Confirmado');
+  assert.equal(getOrderStatusLabel('preparing'), 'Em separação');
+  assert.equal(getOrderStatusLabel('shipped'), 'Enviado');
+  assert.equal(getOrderStatusLabel('delivered'), 'Entregue');
+  assert.equal(getOrderStatusLabel('cancelled'), 'Cancelado');
+});
+
+test('getFreeShippingProgress calculates remaining amount, percentage, and unlock state', async () => {
+  const { getFreeShippingProgress, FREE_SHIPPING_THRESHOLD_BRL } = await import('./commerce');
+  const partial = getFreeShippingProgress(275);
+  assert.equal(partial.eligible, false);
+  assert.equal(partial.remainingBrl, FREE_SHIPPING_THRESHOLD_BRL - 275);
+  assert.equal(partial.percent, 50);
+
+  const unlocked = getFreeShippingProgress(600);
+  assert.equal(unlocked.eligible, true);
+  assert.equal(unlocked.remainingBrl, 0);
+  assert.equal(unlocked.percent, 100);
+});
+
+test('validateCheckoutEmail validates standard email addresses accurately', async () => {
+  const { validateCheckoutEmail } = await import('./commerce');
+  assert.equal(validateCheckoutEmail('cliente@complex.com.br'), true);
+  assert.equal(validateCheckoutEmail('invalido@'), false);
+  assert.equal(validateCheckoutEmail('sem-arroba.com'), false);
+});
+
+test('getOrderStatusLabel returns localized Portuguese labels for all order statuses', async () => {
+  const { getOrderStatusLabel } = await import('./commerce');
+  assert.equal(getOrderStatusLabel('demo_pending'), 'Aguardando Pagamento (Demo)');
+  assert.equal(getOrderStatusLabel('confirmed'), 'Confirmado');
+  assert.equal(getOrderStatusLabel('preparing'), 'Em Preparação');
+  assert.equal(getOrderStatusLabel('shipped'), 'Enviado');
+  assert.equal(getOrderStatusLabel('delivered'), 'Entregue');
+  assert.equal(getOrderStatusLabel('cancelled'), 'Cancelado');
+});
+
+test('getFreeShippingProgress calculates remaining amount, percentage, and unlock state', async () => {
+  const { getFreeShippingProgress, FREE_SHIPPING_THRESHOLD_BRL } = await import('./commerce');
+  const partial = getFreeShippingProgress(275);
+  assert.equal(partial.unlocked, false);
+  assert.equal(partial.remainingBrl, FREE_SHIPPING_THRESHOLD_BRL - 275);
+  assert.equal(partial.percent, 50);
+
+  const unlocked = getFreeShippingProgress(600);
+  assert.equal(unlocked.unlocked, true);
+  assert.equal(unlocked.remainingBrl, 0);
+  assert.equal(unlocked.percent, 100);
+});
+
+test('validateCheckoutEmail validates standard email addresses accurately', async () => {
+  const { validateCheckoutEmail } = await import('./commerce');
+  assert.equal(validateCheckoutEmail('cliente@complex.com.br'), true);
+  assert.equal(validateCheckoutEmail('invalido@'), false);
+  assert.equal(validateCheckoutEmail('sem-arroba.com'), false);
+});

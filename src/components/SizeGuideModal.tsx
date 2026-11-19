@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { X } from 'lucide-react';
 import type { Product } from '../types/store';
+import { useAnimatedDisclosure } from '../utils/useAnimatedDisclosure';
 
 interface SizeGuideModalProps {
   open: boolean;
@@ -9,28 +10,32 @@ interface SizeGuideModalProps {
 }
 
 export const SizeGuideModal: React.FC<SizeGuideModalProps> = ({ open, onClose, product }) => {
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && open) onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  const { mounted, visible } = useAnimatedDisclosure(open, onClose, 220);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   const isBottom = product.category === 'Bottoms';
   const entries = Object.entries(product.measurements || {});
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#171717]/50"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-label={`Guia de medidas — ${product.name}`}
     >
-      <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
-      <div className="relative z-10 w-full max-w-lg bg-[#F1EEE8] text-[#171717] border border-[#171717]/20 p-6 md:p-8">
+      <div
+        className={`overlay-backdrop fixed inset-0 bg-[#171717]/50 backdrop-blur-[1px] ${
+          visible ? 'opacity-100' : 'opacity-0'
+        }`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        className={`modal-panel-center relative z-10 w-full max-w-lg bg-[#F1EEE8] text-[#171717] border border-[#171717]/20 shadow-2xl p-6 md:p-8 max-h-[90vh] overflow-y-auto ${
+          visible ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-[0.97] translate-y-2'
+        }`}
+      >
         <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#171717]/12">
           <div>
             <p className="font-mono-tabular text-[10px] uppercase tracking-[0.14em] text-[#99968F]">
@@ -44,7 +49,7 @@ export const SizeGuideModal: React.FC<SizeGuideModalProps> = ({ open, onClose, p
             type="button"
             onClick={onClose}
             aria-label="Fechar guia de medidas"
-            className="w-9 h-9 inline-flex items-center justify-center -mr-2 cursor-pointer"
+            className="w-9 h-9 inline-flex items-center justify-center -mr-2 hover:opacity-65 transition-opacity cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -67,7 +72,7 @@ export const SizeGuideModal: React.FC<SizeGuideModalProps> = ({ open, onClose, p
               </thead>
               <tbody className="divide-y divide-[#171717]/10 font-mono-tabular text-xs">
                 {entries.map(([size, dims]) => (
-                  <tr key={size}>
+                  <tr key={size} className="hover:bg-[#EAE6DF]/60 transition-colors">
                     <td className="py-2.5 pr-4 font-medium">{size}</td>
                     <td className="py-2.5 pr-4">{dims.widthCm}</td>
                     <td className="py-2.5 pr-4">{dims.lengthCm}</td>

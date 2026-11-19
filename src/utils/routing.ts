@@ -89,3 +89,32 @@ export function resolveStorefrontRoute(rawPathname: string): StorefrontRoute {
 
   return { page: 'home', pathname };
 }
+
+/**
+ * Determines whether a top-bar navigation target matches the current pathname + queryString,
+ * distinguishing `/shop?sort=newest` (Lançamentos) from `/shop` (Loja).
+ */
+export function isNavLinkActive(
+  currentPathname: string,
+  currentQueryString: string,
+  targetPath: string
+): boolean {
+  const normalizedCurrent = normalizePathname(currentPathname);
+  const parsedTarget = parseNavigationTarget(targetPath);
+
+  if (parsedTarget.pathname === '/shop') {
+    if (normalizedCurrent !== '/shop') return false;
+    const currentParams = new URLSearchParams(currentQueryString);
+    const targetParams = new URLSearchParams(parsedTarget.queryString);
+    if (targetParams.get('sort') === 'newest') {
+      return currentParams.get('sort') === 'newest' && !currentParams.get('category');
+    }
+    return currentParams.get('sort') !== 'newest' || Boolean(currentParams.get('category'));
+  }
+
+  return (
+    normalizedCurrent === parsedTarget.pathname ||
+    normalizedCurrent.startsWith(`${parsedTarget.pathname}/`)
+  );
+}
+

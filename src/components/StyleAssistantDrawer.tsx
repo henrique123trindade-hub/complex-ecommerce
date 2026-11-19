@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ImagePlus, Send, X } from 'lucide-react';
-import { useStore } from '../context/StoreContext';
+import { useCatalog, useStoreUI } from '../context/StoreContext';
+import { useAnimatedDisclosure } from '../utils/useAnimatedDisclosure';
 
 interface ChatMessage {
   role: 'user' | 'model';
@@ -8,7 +9,10 @@ interface ChatMessage {
 }
 
 export const StyleAssistantDrawer: React.FC = () => {
-  const { isAdvisorOpen, closeAdvisor, products } = useStore();
+  const { products } = useCatalog();
+  const { isAdvisorOpen, closeAdvisor } = useStoreUI();
+  const { mounted, visible } = useAnimatedDisclosure(isAdvisorOpen, closeAdvisor, 320);
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'model',
@@ -26,15 +30,7 @@ export const StyleAssistantDrawer: React.FC = () => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isAdvisorOpen) closeAdvisor();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isAdvisorOpen, closeAdvisor]);
-
-  if (!isAdvisorOpen) return null;
+  if (!mounted) return null;
 
   const catalogSummary = products
     .filter((p) => p.active)
@@ -113,9 +109,24 @@ export const StyleAssistantDrawer: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Consultoria de Estilo e Caimento COMPLEX">
-      <div className="fixed inset-0 bg-[#171717]/40" onClick={closeAdvisor} aria-hidden="true" />
-      <aside className="relative z-10 w-full max-w-md h-full bg-[#F1EEE8] text-[#171717] border-l border-[#171717]/15 flex flex-col">
+    <div
+      className="fixed inset-0 z-50 flex justify-end"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Consultoria de Estilo e Caimento COMPLEX"
+    >
+      <div
+        className={`overlay-backdrop fixed inset-0 bg-[#171717]/40 backdrop-blur-[1px] ${
+          visible ? 'opacity-100' : 'opacity-0'
+        }`}
+        onClick={closeAdvisor}
+        aria-hidden="true"
+      />
+      <aside
+        className={`drawer-panel-right relative z-10 w-full max-w-md h-full bg-[#F1EEE8] text-[#171717] border-l border-[#171717]/15 shadow-2xl flex flex-col ${
+          visible ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
         <div className="px-6 py-5 border-b border-[#171717]/12 flex items-center justify-between">
           <div>
             <p className="font-mono-tabular text-[10px] uppercase tracking-[0.14em] text-[#99968F]">
@@ -129,7 +140,7 @@ export const StyleAssistantDrawer: React.FC = () => {
             type="button"
             onClick={closeAdvisor}
             aria-label="Fechar consultoria"
-            className="w-10 h-10 inline-flex items-center justify-center cursor-pointer"
+            className="w-10 h-10 inline-flex items-center justify-center hover:opacity-65 transition-opacity cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -145,7 +156,7 @@ export const StyleAssistantDrawer: React.FC = () => {
             className={`px-2.5 py-1 font-mono-tabular uppercase tracking-[0.08em] border cursor-pointer transition-colors ${
               deepMode
                 ? 'bg-[#171717] text-[#F1EEE8] border-[#171717]'
-                : 'border-[#171717]/25 text-[#171717]/70'
+                : 'border-[#171717]/25 text-[#171717]/70 hover:border-[#171717]'
             }`}
           >
             {deepMode ? 'Modo Detalhado' : 'Resposta Rápida'}
@@ -156,7 +167,7 @@ export const StyleAssistantDrawer: React.FC = () => {
           {messages.map((msg, idx) => (
             <div
               key={idx}
-              className={`p-3.5 text-sm leading-relaxed whitespace-pre-wrap ${
+              className={`cart-item-enter p-3.5 text-sm leading-relaxed whitespace-pre-wrap ${
                 msg.role === 'user'
                   ? 'bg-[#171717] text-[#F1EEE8] ml-8'
                   : 'bg-[#EAE6DF] text-[#171717] mr-6 border border-[#171717]/10'
@@ -166,7 +177,9 @@ export const StyleAssistantDrawer: React.FC = () => {
             </div>
           ))}
           {loading && (
-            <p className="font-mono-tabular text-xs text-[#99968F]">Analisando solicitação...</p>
+            <p className="font-mono-tabular text-xs text-[#99968F] animate-pulse">
+              Analisando solicitação...
+            </p>
           )}
           {errorMsg && (
             <p className="text-xs text-[#8A2C2C] border border-[#8A2C2C]/30 bg-[#8A2C2C]/5 p-3">
@@ -192,7 +205,7 @@ export const StyleAssistantDrawer: React.FC = () => {
               disabled={loading}
               aria-label="Enviar foto de peça para análise"
               title="Analisar foto de peça ou look"
-              className="w-10 h-10 shrink-0 border border-[#171717]/20 inline-flex items-center justify-center hover:bg-[#171717]/5 cursor-pointer"
+              className="w-10 h-10 shrink-0 border border-[#171717]/20 inline-flex items-center justify-center hover:bg-[#171717]/5 transition-colors cursor-pointer"
             >
               <ImagePlus className="w-4 h-4" />
             </button>
@@ -205,13 +218,13 @@ export const StyleAssistantDrawer: React.FC = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ex: Tenho 1,78m e 75kg, qual tamanho de hoodie?"
-              className="flex-1 h-10 px-3 bg-transparent border border-[#171717]/20 text-sm focus:outline-none focus:border-[#171717]"
+              className="flex-1 h-10 px-3 bg-transparent border border-[#171717]/20 text-sm focus:outline-none focus:border-[#171717] transition-colors"
             />
             <button
               type="submit"
               disabled={loading || !input.trim()}
               aria-label="Enviar mensagem"
-              className="w-10 h-10 shrink-0 bg-[#171717] text-[#F1EEE8] inline-flex items-center justify-center disabled:opacity-40 cursor-pointer"
+              className="w-10 h-10 shrink-0 bg-[#171717] text-[#F1EEE8] inline-flex items-center justify-center disabled:opacity-40 hover:bg-[#171717]/88 transition-colors cursor-pointer"
             >
               <Send className="w-4 h-4" />
             </button>

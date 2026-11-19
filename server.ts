@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import { sanitizeServerOrderPayload } from './src/utils/catalogNormalization';
 
 dotenv.config();
 
@@ -89,30 +90,13 @@ app.get('/api/cep/:cep', async (req, res) => {
 
 // Demo checkout order registration (prepared for future Mercado Pago / payment gateway integration)
 app.post('/api/orders', (req, res) => {
-  const body = req.body as Record<string, unknown>;
-  if (!body || typeof body.customerName !== 'string' || typeof body.customerEmail !== 'string') {
-    return res.status(400).json({ error: 'Dados do cliente obrigatórios.' });
-  }
-  if (!Array.isArray(body.items) || body.items.length === 0) {
-    return res.status(400).json({ error: 'Carrinho vazio.' });
+  const result = sanitizeServerOrderPayload(req.body as Record<string, unknown>);
+  if (!result.ok) {
+    return res.status(400).json({ error: result.error });
   }
 
-  const orderId = String(body.id || `ord-${Date.now()}`);
-  const orderNumber = String(body.orderNumber || `CMP-${Math.floor(10000 + Math.random() * 90000)}`);
-  const now = new Date().toISOString();
-
-  const record = {
-    ...body,
-    id: orderId,
-    orderNumber,
-    status: 'demo_pending',
-    isDemo: true,
-    paymentGatewayStatus: 'DEMO_MODE_NO_CHARGE',
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  sessionDemoOrders.unshift(record);
+  const record = result.order;
+  sessionDemoOrders.unshift(record as unknown as Record<string, unknown>);
   if (sessionDemoOrders.length > 50) sessionDemoOrders.pop();
 
   return res.status(201).json(record);
@@ -234,14 +218,18 @@ app.post('/api/ai/catalog-copy', async (req, res) => {
 
   try {
     const { productName, category, fitNotes } = req.body as {
-      productName: string;
-      category: string;
+      productName?: string;
+      category?: string;
       fitNotes?: string;
     };
 
+    if (!productName?.trim() || !category?.trim()) {
+      return res.status(400).json({ error: 'Nome e categoria do produto são obrigatórios.' });
+    }
+
     const response = await ai.models.generateContent({
       model: 'gemini-3.1-flash-lite',
-      contents: `Escreva uma descrição de produto sóbria, técnica e editorial (máximo 2 frases) em português do Brasil para a peça "${productName}" da categoria "${category}". Notas de modelagem: ${fitNotes || 'oversized contemporâneo'}. Não invente certificações ou dados falsos.`,
+      contents: `Escreva uma descrição de produto sóbria, técnica e editorial (máximo 2 frases) em português do Brasil para a peça "${productName.trim().slice(0, 140)}" da categoria "${category.trim().slice(0, 60)}". Notas de modelagem: ${(fitNotes || 'oversized contemporâneo').slice(0, 300)}. Não invente certificações ou dados falsos.`,
     });
 
     return res.json({ description: (response.text || '').trim() });

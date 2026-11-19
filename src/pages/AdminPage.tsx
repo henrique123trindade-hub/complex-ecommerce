@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Database, Lock, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
-import { useStore } from '../context/StoreContext';
+import { useAuth, useCatalog, useStoreUI } from '../context/StoreContext';
 import type {
   CategoryItem,
   CouponRecord,
@@ -11,7 +11,7 @@ import type {
   UserProfile,
 } from '../types/store';
 import { STORE_ASSETS } from '../data/assets';
-import { formatBrl } from '../utils/commerce';
+import { formatBrl, getOrderStatusLabel } from '../utils/commerce';
 import { formatFirebaseAuthError } from '../utils/authErrors';
 import { OptimizedImage } from '../components/OptimizedImage';
 
@@ -27,6 +27,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
     authReady,
     isAdmin,
     signInWithGoogle,
+    saveCoupon,
+    deleteCoupon,
+    fetchAllOrders,
+    fetchAllCoupons,
+    fetchAllCustomers,
+    updateOrderStatus,
+  } = useAuth();
+  const {
     products,
     categories,
     editorial,
@@ -35,15 +43,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
     deleteProduct,
     saveCategory,
     saveEditorial,
-    saveCoupon,
-    deleteCoupon,
-    fetchAllOrders,
-    fetchAllCoupons,
-    fetchAllCustomers,
-    updateOrderStatus,
     seedDemoCatalogToFirestore,
-    showToast,
-  } = useStore();
+  } = useCatalog();
+  const { showToast } = useStoreUI();
 
   const [tab, setTab] = useState<AdminTab>('dashboard');
   const [authError, setAuthError] = useState('');
@@ -68,6 +70,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
   }, [editorial]);
 
   useEffect(() => {
+    if (authReady && user && !isAdmin) {
+      onNavigate('/');
+    }
+  }, [authReady, user, isAdmin, onNavigate]);
+
+  useEffect(() => {
     if (!isAdmin) return;
     fetchAllOrders().then(setOrders).catch(() => {});
     fetchAllCoupons().then(setCoupons).catch(() => {});
@@ -76,10 +84,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
 
   if (!authReady) {
     return (
-      <main className="min-h-screen bg-[#EAE6DF] flex items-center justify-center font-mono-tabular text-xs uppercase">
-        Verificando credenciais administrativas...
+      <main className="min-h-screen bg-[#F1EEE8] flex items-center justify-center font-mono-tabular text-xs uppercase text-[#99968F]">
+        Verificando acesso...
       </main>
     );
+  }
+
+  if (user && !isAdmin) {
+    return null;
   }
 
   if (!user || !isAdmin) {
@@ -88,38 +100,34 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
         <div className="max-w-md w-full bg-[#F1EEE8] border border-[#171717]/20 p-8 space-y-5">
           <div className="inline-flex items-center gap-2 font-mono-tabular text-[11px] uppercase tracking-[0.14em] text-[#99968F]">
             <Lock className="w-3.5 h-3.5" />
-            <span>Acesso Restrito — COMPLEX Admin</span>
+            <span>Acesso Restrito — COMPLEX</span>
           </div>
           <h1 className="font-display text-2xl font-bold tracking-tight">
-            Painel Administrativo Protegido
+            Área Administrativa Protegida
           </h1>
           <p className="text-sm leading-relaxed text-[#171717]/75">
-            {!user
-              ? 'Autentique-se com uma conta autorizada de administrador para gerenciar catálogo, imagens reais, pedidos e conteúdo editorial.'
-              : `A conta ${user.email} não possui permissão administrativa registrada no Firestore.`}
+            Esta área é exclusiva para operadores autorizados da marca. Autentique-se com uma conta autorizada ou retorne para a loja.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
-            {!user && (
-              <button
-                type="button"
-                onClick={async () => {
-                  setAuthError('');
-                  try {
-                    await signInWithGoogle();
-                  } catch (err) {
-                    const host = typeof window !== 'undefined' ? window.location.hostname : undefined;
-                    setAuthError(formatFirebaseAuthError(err, host));
-                  }
-                }}
-                className="px-5 py-2.5 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] cursor-pointer"
-              >
-                Entrar com Google
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={async () => {
+                setAuthError('');
+                try {
+                  await signInWithGoogle();
+                } catch (err) {
+                  const host = typeof window !== 'undefined' ? window.location.hostname : undefined;
+                  setAuthError(formatFirebaseAuthError(err, host));
+                }
+              }}
+              className="px-5 py-2.5 bg-[#171717] text-[#F1EEE8] font-mono-tabular text-xs uppercase tracking-[0.12em] hover:bg-[#171717]/88 transition-colors cursor-pointer"
+            >
+              Entrar com Google
+            </button>
             <button
               type="button"
               onClick={() => onNavigate('/')}
-              className="px-5 py-2.5 border border-[#171717]/25 font-mono-tabular text-xs uppercase tracking-[0.12em] cursor-pointer"
+              className="px-5 py-2.5 border border-[#171717]/25 font-mono-tabular text-xs uppercase tracking-[0.12em] hover:border-[#171717] transition-colors cursor-pointer"
             >
               Voltar à Loja
             </button>
@@ -688,14 +696,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate }) => {
                         )
                       );
                     }}
-                    className="h-9 px-3 bg-[#F1EEE8] border border-[#171717]/25 font-mono-tabular text-xs uppercase"
+                    className="h-9 px-3 bg-[#F1EEE8] border border-[#171717]/25 font-mono-tabular text-xs"
                   >
-                    <option value="demo_pending">demo_pending</option>
-                    <option value="confirmed">confirmed</option>
-                    <option value="preparing">preparing</option>
-                    <option value="shipped">shipped</option>
-                    <option value="delivered">delivered</option>
-                    <option value="cancelled">cancelled</option>
+                    <option value="demo_pending">{getOrderStatusLabel('demo_pending')}</option>
+                    <option value="confirmed">{getOrderStatusLabel('confirmed')}</option>
+                    <option value="preparing">{getOrderStatusLabel('preparing')}</option>
+                    <option value="shipped">{getOrderStatusLabel('shipped')}</option>
+                    <option value="delivered">{getOrderStatusLabel('delivered')}</option>
+                    <option value="cancelled">{getOrderStatusLabel('cancelled')}</option>
                   </select>
                 </div>
               ))

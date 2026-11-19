@@ -25,8 +25,10 @@ export const DEFAULT_EDITORIAL: EditorialConfig = {
   storyDetailImage: STORE_ASSETS.detailCotton.url,
   contactEmail: 'atendimento@complex.exemplo (Configurável)',
   instagramHandle: '@complex.store (Configurável)',
-  shippingNote: 'Prazo e condições de envio configuráveis no painel administrativo.',
-  returnsNote: 'Política de trocas e devoluções configurável no painel administrativo.',
+  shippingNote:
+    'Envio para todo o Brasil via Correios PAC e Sedex. Frete padrão cortesia em pedidos acima de R$ 550,00.',
+  returnsNote:
+    'Trocas e devoluções em até 7 dias corridos após o recebimento, conforme o Código de Defesa do Consumidor.',
 };
 
 export const DEMO_CATEGORIES: CategoryItem[] = [

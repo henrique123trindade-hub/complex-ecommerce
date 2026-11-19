@@ -15,7 +15,7 @@ interface FooterProps {
 export const Footer: React.FC<FooterProps> = React.memo(({ onNavigate }) => {
   const { editorial } = useCatalog();
   const { openAdvisor } = useStoreUI();
-  const { subscribeNewsletter } = useAuth();
+  const { isAdmin, subscribeNewsletter } = useAuth();
 
   const [email, setEmail] = useState('');
   const [consent, setConsent] = useState(false);
@@ -272,15 +272,17 @@ export const Footer: React.FC<FooterProps> = React.memo(({ onNavigate }) => {
                   Catálogo Completo
                 </button>
               </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('/admin')}
-                  className="hover:underline underline-offset-4 text-[#6A705C] cursor-pointer"
-                >
-                  Painel Administrativo
-                </button>
-              </li>
+              {isAdmin && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('/admin')}
+                    className="hover:underline underline-offset-4 text-[#6A705C] cursor-pointer"
+                  >
+                    Painel Administrativo
+                  </button>
+                </li>
+              )}
             </ul>
           </div>
 

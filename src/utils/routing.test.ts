@@ -99,3 +99,19 @@ test('vercel.json provides SPA rewrite to /index.html while sparing API and stat
     assert.ok(!matcher.test(excludedPath), `Expected asset/API path ${excludedPath} to bypass SPA rewrite`);
   }
 });
+
+test('isNavLinkActive distinguishes Lançamentos (/shop?sort=newest) from Loja (/shop)', async () => {
+  const { isNavLinkActive } = await import('./routing');
+
+  assert.equal(isNavLinkActive('/shop', '', '/shop'), true);
+  assert.equal(isNavLinkActive('/shop', '', '/shop?sort=newest'), false);
+
+  assert.equal(isNavLinkActive('/shop', 'sort=newest', '/shop?sort=newest'), true);
+  assert.equal(isNavLinkActive('/shop', 'sort=newest', '/shop'), false);
+
+  assert.equal(isNavLinkActive('/shop', 'category=Hoodies', '/shop'), true);
+  assert.equal(isNavLinkActive('/shop', 'category=Hoodies', '/shop?sort=newest'), false);
+
+  assert.equal(isNavLinkActive('/collections', '', '/collections'), true);
+  assert.equal(isNavLinkActive('/about', '', '/collections'), false);
+});

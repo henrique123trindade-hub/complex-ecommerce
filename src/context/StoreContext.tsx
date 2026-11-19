@@ -36,54 +36,16 @@ import {
   readCatalogSnapshot,
   writeCatalogSnapshot,
 } from '../utils/catalogCache';
+import {
+  normalizeCategoryRecord,
+  normalizeEditorialRecord,
+  normalizeOrderRecord,
+  normalizeProductRecord,
+} from '../utils/catalogNormalization';
 
 const CART_STORAGE_KEY = 'complex_cart_v1';
 const DEMO_ORDERS_STORAGE_KEY = 'complex_demo_orders_v1';
 const BOOTSTRAPPED_ADMIN_EMAIL = 'henrique123trindade@gmail.com';
-
-const LEGACY_IMAGE_MAP: Record<string, string> = {
-  '/assets/aistudio/image_e60999db.png': DEFAULT_EDITORIAL.heroDesktopImage,
-  '/src/assets/images/hero_mobile_campaign_1794952246363.jpg':
-    DEFAULT_EDITORIAL.heroMobileImage,
-  '/src/assets/images/editorial_urban_tee_1794952249745.jpg':
-    DEFAULT_EDITORIAL.campaignImage,
-  '/assets/aistudio/image_340e3e49.png': DEFAULT_EDITORIAL.storyImage,
-  '/src/assets/images/campaign_night_lifestyle_1794952250620.jpg':
-    '/src/assets/images/optimized/complex_campaign_dusk_4_87617fd1-1672w.webp',
-  '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_47-1_5292459e.png':
-    '/src/assets/images/optimized/complex_campaign_1_5292459e-1672w.webp',
-  '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_48-2_ca8505d2.png':
-    '/src/assets/images/optimized/complex_model_tee_2_ca8505d2-1122w.webp',
-  '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_48-3_41227f9c.png':
-    '/src/assets/images/optimized/complex_model_hoodie_3_41227f9c-1122w.webp',
-  '/assets/aistudio/Imagem_do_ChatGPT_17_de_nov._de_2026__20_02_49-4_87617fd1.png':
-    '/src/assets/images/optimized/complex_campaign_dusk_4_87617fd1-1672w.webp',
-  '/assets/aistudio/image_2e7943ba.png': '/src/assets/images/optimized/image_2e7943ba-786w.webp',
-  '/assets/images/product_detail_cotton_1794952250261.jpg':
-    '/src/assets/images/optimized/product_detail_cotton_1794952250261-1200w.webp',
-  '/assets/images/product_boxy_tee_front_1794952251135.jpg':
-    '/src/assets/images/optimized/product_boxy_tee_front_1794952251135-896w.webp',
-  '/assets/images/product_boxy_tee_back_1794952252777.jpg':
-    '/src/assets/images/optimized/product_boxy_tee_back_1794952252777-896w.webp',
-  '/assets/images/product_tee_bone_1794952275758.jpg':
-    '/src/assets/images/optimized/product_tee_bone_1794952275758-896w.webp',
-  '/assets/images/product_hoodie_taupe_1794952251370.jpg':
-    '/src/assets/images/optimized/product_hoodie_taupe_1794952251370-896w.webp',
-  '/assets/images/product_hoodie_charcoal_1794952276198.jpg':
-    '/src/assets/images/optimized/product_hoodie_charcoal_1794952276198-896w.webp',
-  '/assets/images/product_crewneck_olive_1794952278742.jpg':
-    '/src/assets/images/optimized/product_crewneck_olive_1794952278742-896w.webp',
-  '/assets/images/product_cargo_olive_1794952252317.jpg':
-    '/src/assets/images/optimized/product_cargo_olive_1794952252317-896w.webp',
-  '/assets/images/product_denim_wide_1794952276236.jpg':
-    '/src/assets/images/optimized/product_denim_wide_1794952276236-896w.webp',
-  '/assets/images/product_jacket_shell_1794952276902.jpg':
-    '/src/assets/images/optimized/product_jacket_shell_1794952276902-896w.webp',
-  '/assets/images/product_accessories_cap_1794952253579.jpg':
-    '/src/assets/images/optimized/product_accessories_cap_1794952253579-896w.webp',
-};
-
-const mapLegacyUrl = (url: string): string => LEGACY_IMAGE_MAP[url] || url;
 
 async function loadFirebaseServices() {
   const [firestore, firebaseAuth, firebaseModule] = await Promise.all([
@@ -124,7 +86,13 @@ export interface CartContextValue {
   cart: CartItem[];
   cartCount: number;
   cartSubtotal: number;
-  addToCart: (product: Product, colorName: string, size: string, quantity?: number) => void;
+  addToCart: (
+    product: Product,
+    colorName: string,
+    size: string,
+    quantity?: number,
+    options?: { openDrawer?: boolean }
+  ) => void;
   updateCartQuantity: (key: string, quantity: number) => void;
   removeFromCart: (key: string) => void;
   clearCart: () => void;
@@ -226,6 +194,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAdvisorOpen, setIsAdvisorOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+  const isAdminRef = useRef(isAdmin);
+  isAdminRef.current = isAdmin;
+
+  const assertAdminAccess = useCallback(() => {
+    if (!isAdminRef.current) {
+      throw new Error('Permissão administrativa necessária para esta operação.');
+    }
+  }, []);
 
   const openBag = useCallback(() => setIsBagOpen(true), []);
   const closeBag = useCallback(() => setIsBagOpen(false), []);
@@ -236,9 +213,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
-    window.setTimeout(() => {
-      setToastMessage((current) => (current === msg ? null : current));
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
     }, 3200);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -266,59 +255,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ]);
 
         const nextProducts: Product[] = !prodSnap.empty
-          ? prodSnap.docs.map((d) => {
-              const data = d.data() as Product;
-              return {
-                ...data,
-                images: Array.isArray(data.images) ? data.images.map(mapLegacyUrl) : [],
-                colors: Array.isArray(data.colors)
-                  ? data.colors.map((c) => ({
-                      ...c,
-                      images: Array.isArray(c.images) ? c.images.map(mapLegacyUrl) : [],
-                    }))
-                  : [],
-              };
-            })
+          ? prodSnap.docs.map((d) => normalizeProductRecord(d.data() as Product))
           : DEMO_PRODUCTS;
 
         const nextSource: 'demo' | 'firestore' = !prodSnap.empty ? 'firestore' : 'demo';
 
         const nextCategories: CategoryItem[] = !catSnap.empty
-          ? catSnap.docs.map((d) => {
-              const data = d.data() as CategoryItem;
-              return {
-                ...data,
-                image: data.image ? mapLegacyUrl(data.image) : data.image,
-              };
-            })
+          ? catSnap.docs.map((d) => normalizeCategoryRecord(d.data() as CategoryItem))
           : DEMO_CATEGORIES;
 
-        let nextEditorial: EditorialConfig = DEFAULT_EDITORIAL;
-        if (edSnap.exists()) {
-          const rawEd = edSnap.data() as Partial<EditorialConfig>;
-          const normalizedEd: Partial<EditorialConfig> = {
-            ...rawEd,
-            heroTitle:
-              rawEd.heroTitle === 'NEW PERSPECTIVE.' ? 'NOVA PERSPECTIVA.' : rawEd.heroTitle,
-            campaignTitle:
-              rawEd.campaignTitle === 'BUILT FOR EVERYDAY.'
-                ? 'FEITO PARA O DIA A DIA.'
-                : rawEd.campaignTitle,
-            heroDesktopImage: rawEd.heroDesktopImage
-              ? mapLegacyUrl(rawEd.heroDesktopImage)
-              : DEFAULT_EDITORIAL.heroDesktopImage,
-            heroMobileImage: rawEd.heroMobileImage
-              ? mapLegacyUrl(rawEd.heroMobileImage)
-              : DEFAULT_EDITORIAL.heroMobileImage,
-            campaignImage: rawEd.campaignImage
-              ? mapLegacyUrl(rawEd.campaignImage)
-              : DEFAULT_EDITORIAL.campaignImage,
-            storyImage: rawEd.storyImage
-              ? mapLegacyUrl(rawEd.storyImage)
-              : DEFAULT_EDITORIAL.storyImage,
-          };
-          nextEditorial = { ...DEFAULT_EDITORIAL, ...normalizedEd };
-        }
+        const nextEditorial: EditorialConfig = edSnap.exists()
+          ? normalizeEditorialRecord(edSnap.data() as Partial<EditorialConfig>)
+          : DEFAULT_EDITORIAL;
 
         const nextSnapshot = {
           products: nextProducts,
@@ -518,7 +466,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [showToast]);
 
   const addToCart = useCallback(
-    (product: Product, colorName: string, size: string, quantity = 1) => {
+    (
+      product: Product,
+      colorName: string,
+      size: string,
+      quantity = 1,
+      options?: { openDrawer?: boolean }
+    ) => {
       const sizeEntry = product.sizes.find((s) => s.size === size);
       if (!sizeEntry || sizeEntry.stock <= 0) {
         showToast('Tamanho indisponível no momento.');
@@ -528,6 +482,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const colorObj =
         product.colors.find((c) => c.name === colorName) || product.colors[0];
       const key = `${product.id}::${colorObj?.name || 'Padrão'}::${size}`;
+
+      const existingItem = cartRef.current.find((item) => item.key === key);
+      if (existingItem && existingItem.quantity >= sizeEntry.stock) {
+        if (options?.openDrawer !== false) {
+          setIsBagOpen(true);
+        }
+        showToast(`Limite disponível (${sizeEntry.stock} un.) já está na sacola.`);
+        return;
+      }
 
       setCart((prev) => {
         const existing = prev.find((item) => item.key === key);
@@ -557,7 +520,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ];
       });
 
-      setIsBagOpen(true);
+      if (options?.openDrawer !== false) {
+        setIsBagOpen(true);
+      }
       showToast(`${product.name} (${size}) adicionado à sacola.`);
     },
     [showToast]
@@ -714,51 +679,27 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         orderBy('createdAt', 'desc')
       );
       const snap = await getDocs(q);
-      return snap.docs.map((d) => {
-        const raw = d.data() as Record<string, unknown>;
-        return {
-          ...(raw as unknown as OrderRecord),
-          createdAt:
-            raw.createdAt && typeof (raw.createdAt as { toDate?: () => Date }).toDate === 'function'
-              ? (raw.createdAt as { toDate: () => Date }).toDate().toISOString()
-              : String(raw.createdAt || new Date().toISOString()),
-          updatedAt:
-            raw.updatedAt && typeof (raw.updatedAt as { toDate?: () => Date }).toDate === 'function'
-              ? (raw.updatedAt as { toDate: () => Date }).toDate().toISOString()
-              : String(raw.updatedAt || new Date().toISOString()),
-        };
-      });
+      return snap.docs.map((d) => normalizeOrderRecord(d.data() as Record<string, unknown>));
     } catch (error) {
       return handleFirestoreError(error, OperationType.LIST, path);
     }
   }, [getDemoOrders, user]);
 
   const fetchAllOrders = useCallback(async (): Promise<OrderRecord[]> => {
+    assertAdminAccess();
     const path = 'orders';
     const { collection, db, getDocs, handleFirestoreError, OperationType, orderBy, query } =
       await getFirebaseServices();
     try {
       const snap = await getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')));
-      return snap.docs.map((d) => {
-        const raw = d.data() as Record<string, unknown>;
-        return {
-          ...(raw as unknown as OrderRecord),
-          createdAt:
-            raw.createdAt && typeof (raw.createdAt as { toDate?: () => Date }).toDate === 'function'
-              ? (raw.createdAt as { toDate: () => Date }).toDate().toISOString()
-              : String(raw.createdAt || new Date().toISOString()),
-          updatedAt:
-            raw.updatedAt && typeof (raw.updatedAt as { toDate?: () => Date }).toDate === 'function'
-              ? (raw.updatedAt as { toDate: () => Date }).toDate().toISOString()
-              : String(raw.updatedAt || new Date().toISOString()),
-        };
-      });
+      return snap.docs.map((d) => normalizeOrderRecord(d.data() as Record<string, unknown>));
     } catch (error) {
       return handleFirestoreError(error, OperationType.LIST, path);
     }
-  }, []);
+  }, [assertAdminAccess]);
 
   const fetchAllCoupons = useCallback(async (): Promise<CouponRecord[]> => {
+    assertAdminAccess();
     const path = 'coupons';
     const { collection, db, getDocs, handleFirestoreError, OperationType } =
       await getFirebaseServices();
@@ -768,9 +709,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (error) {
       return handleFirestoreError(error, OperationType.LIST, path);
     }
-  }, []);
+  }, [assertAdminAccess]);
 
   const fetchAllCustomers = useCallback(async (): Promise<UserProfile[]> => {
+    assertAdminAccess();
     const path = 'users';
     const { collection, db, getDocs, handleFirestoreError, OperationType } =
       await getFirebaseServices();
@@ -780,7 +722,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (error) {
       return handleFirestoreError(error, OperationType.LIST, path);
     }
-  }, []);
+  }, [assertAdminAccess]);
 
   const fetchAddresses = useCallback(async (): Promise<BrazilianAddress[]> => {
     if (!user) return [];
@@ -853,6 +795,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const saveProduct = useCallback(
     async (product: Product) => {
+      assertAdminAccess();
       const path = `products/${product.id}`;
       const {
         db,
@@ -895,11 +838,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         handleFirestoreError(error, OperationType.WRITE, path);
       }
     },
-    [refreshCatalog, showToast]
+    [assertAdminAccess, refreshCatalog, showToast]
   );
 
   const deleteProduct = useCallback(
     async (productId: string) => {
+      assertAdminAccess();
       const path = `products/${productId}`;
       const { db, deleteDoc, doc, handleFirestoreError, OperationType } =
         await getFirebaseServices();
@@ -911,11 +855,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         handleFirestoreError(error, OperationType.DELETE, path);
       }
     },
-    [refreshCatalog, showToast]
+    [assertAdminAccess, refreshCatalog, showToast]
   );
 
   const saveCategory = useCallback(
     async (category: CategoryItem) => {
+      assertAdminAccess();
       const path = `categories/${category.id}`;
       const { db, doc, handleFirestoreError, OperationType, serverTimestamp, setDoc } =
         await getFirebaseServices();
@@ -930,11 +875,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         handleFirestoreError(error, OperationType.WRITE, path);
       }
     },
-    [refreshCatalog, showToast]
+    [assertAdminAccess, refreshCatalog, showToast]
   );
 
   const saveEditorial = useCallback(
     async (nextEditorial: EditorialConfig) => {
+      assertAdminAccess();
       const path = 'editorial/homepage';
       const { db, doc, handleFirestoreError, OperationType, serverTimestamp, setDoc } =
         await getFirebaseServices();
@@ -950,11 +896,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         handleFirestoreError(error, OperationType.WRITE, path);
       }
     },
-    [refreshCatalog, showToast]
+    [assertAdminAccess, refreshCatalog, showToast]
   );
 
   const saveCoupon = useCallback(
     async (coupon: CouponRecord) => {
+      assertAdminAccess();
       const normalized = coupon.code.trim().toUpperCase();
       const path = `coupons/${normalized}`;
       const { db, doc, handleFirestoreError, OperationType, serverTimestamp, setDoc } =
@@ -973,11 +920,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         handleFirestoreError(error, OperationType.WRITE, path);
       }
     },
-    [showToast]
+    [assertAdminAccess, showToast]
   );
 
   const deleteCoupon = useCallback(
     async (code: string) => {
+      assertAdminAccess();
       const path = `coupons/${code}`;
       const { db, deleteDoc, doc, handleFirestoreError, OperationType } =
         await getFirebaseServices();
@@ -988,11 +936,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         handleFirestoreError(error, OperationType.DELETE, path);
       }
     },
-    [showToast]
+    [assertAdminAccess, showToast]
   );
 
   const updateOrderStatus = useCallback(
     async (orderId: string, status: OrderStatus) => {
+      assertAdminAccess();
       const path = `orders/${orderId}`;
       const { db, doc, handleFirestoreError, OperationType, serverTimestamp, updateDoc } =
         await getFirebaseServices();
@@ -1006,10 +955,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         handleFirestoreError(error, OperationType.UPDATE, path);
       }
     },
-    [showToast]
+    [assertAdminAccess, showToast]
   );
 
   const seedDemoCatalogToFirestore = useCallback(async () => {
+    assertAdminAccess();
     const { db, doc, handleFirestoreError, OperationType, serverTimestamp, setDoc } =
       await getFirebaseServices();
     try {
@@ -1044,7 +994,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'products');
     }
-  }, [refreshCatalog, showToast]);
+  }, [assertAdminAccess, refreshCatalog, showToast]);
 
   const subscribeNewsletter = useCallback(
     async (email: string, consent: boolean) => {

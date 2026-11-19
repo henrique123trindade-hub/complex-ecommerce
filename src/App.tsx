@@ -156,9 +156,27 @@ const StorefrontRouter: React.FC = () => {
     }
   };
 
+  const [hasOpenedBag, setHasOpenedBag] = useState(false);
+  const [hasOpenedSearch, setHasOpenedSearch] = useState(false);
+  const [hasOpenedAdvisor, setHasOpenedAdvisor] = useState(false);
+
+  useEffect(() => {
+    if (isBagOpen) setHasOpenedBag(true);
+  }, [isBagOpen]);
+
+  useEffect(() => {
+    if (isSearchOpen) setHasOpenedSearch(true);
+  }, [isSearchOpen]);
+
+  useEffect(() => {
+    if (isAdvisorOpen) setHasOpenedAdvisor(true);
+  }, [isAdvisorOpen]);
+
   return (
     <div className="min-h-screen flex flex-col bg-[#F1EEE8] text-[#171717]">
-      {!isAdminRoute && <Header currentPath={pathname} onNavigate={navigate} />}
+      {!isAdminRoute && (
+        <Header currentPath={pathname} currentQuery={queryString} onNavigate={navigate} />
+      )}
 
       <div
         key={pathname}
@@ -169,17 +187,17 @@ const StorefrontRouter: React.FC = () => {
 
       {!isAdminRoute && <Footer onNavigate={navigate} />}
 
-      {isBagOpen && (
+      {(isBagOpen || hasOpenedBag) && (
         <Suspense fallback={null}>
           <BagDrawer onNavigate={navigate} />
         </Suspense>
       )}
-      {isSearchOpen && (
+      {(isSearchOpen || hasOpenedSearch) && (
         <Suspense fallback={null}>
           <SearchOverlay onNavigate={navigate} />
         </Suspense>
       )}
-      {isAdvisorOpen && (
+      {(isAdvisorOpen || hasOpenedAdvisor) && (
         <Suspense fallback={null}>
           <StyleAssistantDrawer />
         </Suspense>
@@ -187,9 +205,10 @@ const StorefrontRouter: React.FC = () => {
 
       {toastMessage && (
         <div
+          key={toastMessage}
           role="status"
           aria-live="polite"
-          className="fixed bottom-5 right-5 z-50 bg-[#171717] text-[#F1EEE8] px-4 py-3 font-mono-tabular text-xs tracking-[0.06em] border border-[#F1EEE8]/20 max-w-sm"
+          className="toast-enter fixed bottom-5 right-5 z-50 bg-[#171717] text-[#F1EEE8] px-4 py-3 font-mono-tabular text-xs tracking-[0.06em] border border-[#F1EEE8]/20 shadow-[0_10px_30px_rgba(23,23,23,0.18)] max-w-sm"
         >
           {toastMessage}
         </div>

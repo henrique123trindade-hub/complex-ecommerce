@@ -96,11 +96,14 @@ export const ShopPage: React.FC<ShopPageProps> = React.memo(({ queryString, onNa
     [products, filters]
   );
 
+  const secondaryFilterCount =
+    (filters.size !== 'ALL' ? 1 : 0) +
+    (filters.color !== 'ALL' ? 1 : 0) +
+    (filters.maxPrice !== null ? 1 : 0);
+
   const hasActiveFilters =
     filters.category !== 'ALL' ||
-    filters.size !== 'ALL' ||
-    filters.color !== 'ALL' ||
-    filters.maxPrice !== null ||
+    secondaryFilterCount > 0 ||
     filters.query.trim() !== '';
 
   const breadcrumbItems = useMemo(
@@ -152,7 +155,7 @@ export const ShopPage: React.FC<ShopPageProps> = React.memo(({ queryString, onNa
                 key={cat}
                 type="button"
                 onClick={() => updateFilters({ category: cat })}
-                className={`px-3.5 py-2 font-mono-tabular text-[11px] uppercase tracking-[0.12em] whitespace-nowrap shrink-0 border transition-colors cursor-pointer ${
+                className={`px-3.5 py-2 font-mono-tabular text-[11px] uppercase tracking-[0.12em] whitespace-nowrap shrink-0 border transition-colors duration-200 cursor-pointer ${
                   filters.category === cat
                     ? 'bg-[#171717] text-[#F1EEE8] border-[#171717]'
                     : 'bg-transparent text-[#171717]/80 border-[#171717]/15 hover:border-[#171717]'
@@ -175,7 +178,7 @@ export const ShopPage: React.FC<ShopPageProps> = React.memo(({ queryString, onNa
                 value={filters.query}
                 onChange={(e) => updateFilters({ query: e.target.value })}
                 placeholder="Buscar peça..."
-                className="w-full h-10 pl-9 pr-3 bg-transparent border border-[#171717]/20 text-xs focus:outline-none focus:border-[#171717]"
+                className="w-full h-10 pl-9 pr-3 bg-transparent border border-[#171717]/20 text-xs focus:outline-none focus:border-[#171717] transition-colors"
               />
             </div>
 
@@ -183,10 +186,16 @@ export const ShopPage: React.FC<ShopPageProps> = React.memo(({ queryString, onNa
               type="button"
               onClick={() => setFiltersOpen((v) => !v)}
               aria-expanded={filtersOpen}
-              className="h-10 px-4 border border-[#171717]/20 inline-flex items-center gap-2 font-mono-tabular text-[11px] uppercase tracking-[0.12em] hover:border-[#171717] cursor-pointer"
+              className={`h-10 px-4 border inline-flex items-center gap-2 font-mono-tabular text-[11px] uppercase tracking-[0.12em] transition-colors cursor-pointer ${
+                filtersOpen || secondaryFilterCount > 0
+                  ? 'border-[#171717] bg-[#171717] text-[#F1EEE8]'
+                  : 'border-[#171717]/20 hover:border-[#171717]'
+              }`}
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>Filtros</span>
+              <span>
+                {secondaryFilterCount > 0 ? `Filtros (${secondaryFilterCount})` : 'Filtros'}
+              </span>
             </button>
 
             <label htmlFor="catalog-sort" className="sr-only">
@@ -196,7 +205,7 @@ export const ShopPage: React.FC<ShopPageProps> = React.memo(({ queryString, onNa
               id="catalog-sort"
               value={filters.sort}
               onChange={(e) => updateFilters({ sort: e.target.value as CatalogFilters['sort'] })}
-              className="h-10 px-3 bg-[#F1EEE8] border border-[#171717]/20 font-mono-tabular text-[11px] uppercase tracking-[0.1em] focus:outline-none focus:border-[#171717] cursor-pointer"
+              className="h-10 px-3 bg-[#F1EEE8] border border-[#171717]/20 font-mono-tabular text-[11px] uppercase tracking-[0.1em] focus:outline-none focus:border-[#171717] transition-colors cursor-pointer"
             >
               <option value="newest">Ordenar: Novidades</option>
               <option value="price-asc">Menor preço</option>
@@ -206,71 +215,80 @@ export const ShopPage: React.FC<ShopPageProps> = React.memo(({ queryString, onNa
         </div>
 
         {/* Expandable Filter Panel */}
-        {filtersOpen && (
-          <div className="py-6 border-b border-[#171717]/12 grid grid-cols-1 md:grid-cols-3 gap-6 bg-[#EAE6DF]/40 px-4 mt-2">
-            <div>
-              <p className="font-mono-tabular text-[11px] uppercase tracking-[0.12em] text-[#99968F] mb-2.5">
-                Tamanho disponível
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {SIZES.map((sz) => (
-                  <button
-                    key={sz}
-                    type="button"
-                    onClick={() => updateFilters({ size: sz })}
-                    className={`px-2.5 py-1.5 font-mono-tabular text-[11px] border cursor-pointer ${
-                      filters.size === sz
-                        ? 'bg-[#171717] text-[#F1EEE8] border-[#171717]'
-                        : 'border-[#171717]/20 text-[#171717]/80 hover:border-[#171717]'
-                    }`}
-                  >
-                    {sz === 'ALL' ? 'Todos' : sz}
-                  </button>
-                ))}
+        <div
+          className="accordion-panel"
+          data-open={filtersOpen ? 'true' : 'false'}
+          aria-hidden={!filtersOpen}
+        >
+          <div>
+            <div className="py-6 border-b border-[#171717]/12 grid grid-cols-1 md:grid-cols-3 gap-6 bg-[#EAE6DF]/40 px-4 mt-2">
+              <div>
+                <p className="font-mono-tabular text-[11px] uppercase tracking-[0.12em] text-[#99968F] mb-2.5">
+                  Tamanho disponível
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {SIZES.map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      tabIndex={filtersOpen ? 0 : -1}
+                      onClick={() => updateFilters({ size: sz })}
+                      className={`px-2.5 py-1.5 font-mono-tabular text-[11px] border transition-colors cursor-pointer ${
+                        filters.size === sz
+                          ? 'bg-[#171717] text-[#F1EEE8] border-[#171717]'
+                          : 'border-[#171717]/20 text-[#171717]/80 hover:border-[#171717]'
+                      }`}
+                    >
+                      {sz === 'ALL' ? 'Todos' : sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="font-mono-tabular text-[11px] uppercase tracking-[0.12em] text-[#99968F] mb-2.5">
+                  Cor
+                </p>
+                <label htmlFor="filter-color" className="sr-only">
+                  Filtrar por cor
+                </label>
+                <select
+                  id="filter-color"
+                  tabIndex={filtersOpen ? 0 : -1}
+                  value={filters.color}
+                  onChange={(e) => updateFilters({ color: e.target.value })}
+                  className="w-full h-10 px-3 bg-[#F1EEE8] border border-[#171717]/20 text-xs focus:outline-none focus:border-[#171717] transition-colors"
+                >
+                  {availableColors.map((colorName) => (
+                    <option key={colorName} value={colorName}>
+                      {colorName === 'ALL' ? 'Todas as cores' : colorName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <p className="font-mono-tabular text-[11px] uppercase tracking-[0.12em] text-[#99968F] mb-2.5">
+                  Preço máximo: {filters.maxPrice ? formatBrl(filters.maxPrice) : 'Sem limite'}
+                </p>
+                <input
+                  type="range"
+                  tabIndex={filtersOpen ? 0 : -1}
+                  min={150}
+                  max={900}
+                  step={50}
+                  value={filters.maxPrice ?? 900}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    updateFilters({ maxPrice: val >= 900 ? null : val });
+                  }}
+                  aria-label="Preço máximo em reais"
+                  className="w-full accent-[#171717] cursor-pointer"
+                />
               </div>
             </div>
-
-            <div>
-              <p className="font-mono-tabular text-[11px] uppercase tracking-[0.12em] text-[#99968F] mb-2.5">
-                Cor
-              </p>
-              <label htmlFor="filter-color" className="sr-only">
-                Filtrar por cor
-              </label>
-              <select
-                id="filter-color"
-                value={filters.color}
-                onChange={(e) => updateFilters({ color: e.target.value })}
-                className="w-full h-10 px-3 bg-[#F1EEE8] border border-[#171717]/20 text-xs focus:outline-none"
-              >
-                {availableColors.map((colorName) => (
-                  <option key={colorName} value={colorName}>
-                    {colorName === 'ALL' ? 'Todas as cores' : colorName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <p className="font-mono-tabular text-[11px] uppercase tracking-[0.12em] text-[#99968F] mb-2.5">
-                Preço máximo: {filters.maxPrice ? formatBrl(filters.maxPrice) : 'Sem limite'}
-              </p>
-              <input
-                type="range"
-                min={150}
-                max={900}
-                step={50}
-                value={filters.maxPrice ?? 900}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  updateFilters({ maxPrice: val >= 900 ? null : val });
-                }}
-                aria-label="Preço máximo em reais"
-                className="w-full accent-[#171717]"
-              />
-            </div>
           </div>
-        )}
+        </div>
 
         {/* Active Filter Clear Bar */}
         {hasActiveFilters && (
@@ -281,7 +299,7 @@ export const ShopPage: React.FC<ShopPageProps> = React.memo(({ queryString, onNa
             <button
               type="button"
               onClick={clearAllFilters}
-              className="inline-flex items-center gap-1 font-mono-tabular text-[11px] uppercase tracking-[0.12em] underline underline-offset-4 cursor-pointer"
+              className="inline-flex items-center gap-1 font-mono-tabular text-[11px] uppercase tracking-[0.12em] underline underline-offset-4 hover:opacity-70 transition-opacity cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
               <span>Limpar filtros</span>

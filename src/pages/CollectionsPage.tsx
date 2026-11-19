@@ -1,15 +1,16 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
 import { STORE_ASSETS } from '../data/assets';
-import { useStore } from '../context/StoreContext';
+import { useCatalog } from '../context/StoreContext';
 import { OptimizedImage } from '../components/OptimizedImage';
+import { Reveal } from '../components/Reveal';
 
 interface CollectionsPageProps {
   onNavigate: (path: string) => void;
 }
 
 export const CollectionsPage: React.FC<CollectionsPageProps> = ({ onNavigate }) => {
-  const { products } = useStore();
+  const { products } = useCatalog();
 
   const looks = [
     {
@@ -66,19 +67,20 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ onNavigate }) 
 
       <section className="max-w-[1440px] mx-auto px-4 md:px-8 py-12 md:py-16 space-y-16">
         {looks.map((look, idx) => (
-          <article
+          <Reveal
             key={look.index}
+            as="article"
             className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center pb-14 border-b border-[#171717]/10 last:border-b-0"
           >
             <div className={`lg:col-span-7 ${idx % 2 === 1 ? 'lg:order-2' : ''}`}>
-              <div className={`${look.aspectClass} bg-[#EAE6DF] overflow-hidden`}>
+              <div className={`group ${look.aspectClass} bg-[#EAE6DF] overflow-hidden`}>
                 <OptimizedImage
                   src={look.image}
                   alt={look.title}
                   sizes="split"
                   priority={idx === 0}
                   className="w-full h-full"
-                  imgClassName="w-full h-full object-cover object-[50%_18%]"
+                  imgClassName="product-hover-zoom w-full h-full object-cover object-[50%_18%] group-hover:scale-[1.025]"
                 />
               </div>
             </div>
@@ -96,13 +98,13 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({ onNavigate }) 
               <button
                 type="button"
                 onClick={() => onNavigate(`/product/${look.productSlug}`)}
-                className="inline-flex items-center gap-2 font-mono-tabular text-xs uppercase tracking-[0.12em] border-b border-[#171717] pb-1 hover:opacity-75 cursor-pointer"
+                className="group inline-flex items-center gap-2 font-mono-tabular text-xs uppercase tracking-[0.12em] border-b border-[#171717] pb-1 hover:opacity-75 transition-opacity cursor-pointer"
               >
                 <span>{look.productLabel}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform duration-200" />
               </button>
             </div>
-          </article>
+          </Reveal>
         ))}
       </section>
     </main>
