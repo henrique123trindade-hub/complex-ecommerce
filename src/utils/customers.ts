@@ -1,9 +1,11 @@
 import type {
   AdminCustomerSummary,
+  AuthProviderId,
   CustomerAccountStatus,
   OrderRecord,
   UserProfile,
 } from '../types/store';
+import { extractAuthProviders, formatAuthProvidersLabel } from './authValidation';
 
 export type CustomerStatusFilter = 'ALL' | CustomerAccountStatus;
 export type CustomerSortOption =
@@ -89,6 +91,14 @@ export function normalizeUserProfileRecord(
   const cpf = sanitizeCustomerString(raw.cpf, 20);
   const phone = sanitizeCustomerString(raw.phone, 30);
   const status: CustomerAccountStatus = raw.status === 'inactive' ? 'inactive' : 'active';
+  const rawProviders = Array.isArray(raw.authProviders)
+    ? extractAuthProviders(
+        raw.authProviders.map((entry) =>
+          typeof entry === 'string' ? { providerId: entry } : { providerId: '' }
+        )
+      )
+    : [];
+  const emailVerified = typeof raw.emailVerified === 'boolean' ? raw.emailVerified : undefined;
   const createdAt = toIsoStringOptional(raw.createdAt);
   const updatedAt = toIsoStringOptional(raw.updatedAt);
   const lastLoginAt = toIsoStringOptional(raw.lastLoginAt);
@@ -100,6 +110,8 @@ export function normalizeUserProfileRecord(
     cpf,
     phone,
     status,
+    ...(rawProviders.length > 0 ? { authProviders: rawProviders } : {}),
+    ...(emailVerified !== undefined ? { emailVerified } : {}),
     ...(createdAt ? { createdAt } : {}),
     ...(updatedAt ? { updatedAt } : {}),
     ...(lastLoginAt ? { lastLoginAt } : {}),
@@ -118,6 +130,8 @@ export function buildCustomerCreatePayload<TTimestamp>(
     cpf?: string | null;
     phone?: string | null;
     status?: CustomerAccountStatus;
+    authProviders?: AuthProviderId[];
+    emailVerified?: boolean;
   },
   timestampValue: TTimestamp
 ) {
@@ -127,6 +141,9 @@ export function buildCustomerCreatePayload<TTimestamp>(
   const cpf = sanitizeCustomerString(input.cpf, 20);
   const phone = sanitizeCustomerString(input.phone, 30);
   const status: CustomerAccountStatus = input.status === 'inactive' ? 'inactive' : 'active';
+  const cleanProviders = Array.isArray(input.authProviders)
+    ? extractAuthProviders(input.authProviders.map((providerId) => ({ providerId })))
+    : [];
 
   return {
     uid,
@@ -135,6 +152,8 @@ export function buildCustomerCreatePayload<TTimestamp>(
     cpf,
     phone,
     status,
+    ...(cleanProviders.length > 0 ? { authProviders: cleanProviders } : {}),
+    ...(typeof input.emailVerified === 'boolean' ? { emailVerified: input.emailVerified } : {}),
     lastLoginAt: timestampValue,
     createdAt: timestampValue,
     updatedAt: timestampValue,
@@ -275,10 +294,12 @@ export function filterSortPaginateCustomers(
       const name = (row.profile.displayName || '').toLowerCase();
       const email = (row.profile.email || '').toLowerCase();
       const phone = (row.profile.phone || '').toLowerCase();
+      const authMethod = formatAuthProvidersLabel(row.profile.authProviders).toLowerCase();
       if (
         !name.includes(normalizedQuery) &&
         !email.includes(normalizedQuery) &&
-        !phone.includes(normalizedQuery)
+        !phone.includes(normalizedQuery) &&
+        !authMethod.includes(normalizedQuery)
       ) {
         return false;
       }

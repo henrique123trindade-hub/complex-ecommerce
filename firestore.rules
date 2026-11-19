@@ -127,7 +127,7 @@ service cloud.firestore {
 
     function isValidUserProfile(data, userId) {
       return data.keys().hasAll(['uid', 'email', 'createdAt', 'updatedAt'])
-      && data.keys().hasOnly(['uid', 'displayName', 'email', 'cpf', 'phone', 'status', 'lastLoginAt', 'createdAt', 'updatedAt'])
+      && data.keys().hasOnly(['uid', 'displayName', 'email', 'cpf', 'phone', 'status', 'authProviders', 'emailVerified', 'lastLoginAt', 'createdAt', 'updatedAt'])
       && data.uid == userId
       && isValidId(data.uid)
       && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
@@ -135,6 +135,8 @@ service cloud.firestore {
       && (!('cpf' in data) || (data.cpf is string && data.cpf.size() <= 20))
       && (!('phone' in data) || (data.phone is string && data.phone.size() <= 30))
       && (!('status' in data) || data.status in ['active', 'inactive'])
+      && (!('authProviders' in data) || (data.authProviders is list && data.authProviders.size() >= 1 && data.authProviders.size() <= 5 && data.authProviders.hasOnly(['google', 'password'])))
+      && (!('emailVerified' in data) || data.emailVerified is bool)
       && (!('lastLoginAt' in data) || data.lastLoginAt is timestamp)
       && data.createdAt is timestamp
       && data.updatedAt is timestamp;
@@ -267,16 +269,22 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
       allow list: if isAdmin();
-      allow create: if isValidId(userId) && isVerified()
+      allow create: if isValidId(userId) && isSignedIn()
         && isValidUserProfile(incoming(), userId)
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
         && (!('lastLoginAt' in incoming()) || incoming().lastLoginAt == request.time)
         && (
-          (isOwner(userId) && (!('status' in incoming()) || incoming().status == 'active')) ||
+          (
+            isOwner(userId)
+            && request.auth.token.email is string
+            && incoming().email == request.auth.token.email.lower()
+            && (!('status' in incoming()) || incoming().status == 'active')
+            && (!('emailVerified' in incoming()) || incoming().emailVerified == (request.auth.token.email_verified == true))
+          ) ||
           isAdmin()
         );
-      allow update: if isValidId(userId) && isVerified()
+      allow update: if isValidId(userId) && isSignedIn()
         && isValidUserProfile(incoming(), userId)
         && incoming().uid == existing().uid
         && incoming().email == existing().email
@@ -285,7 +293,8 @@ service cloud.firestore {
         && (
           (
             isOwner(userId)
-            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'cpf', 'phone', 'lastLoginAt', 'updatedAt'])
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'cpf', 'phone', 'authProviders', 'emailVerified', 'lastLoginAt', 'updatedAt'])
+            && (!('emailVerified' in incoming()) || incoming().emailVerified == (request.auth.token.email_verified == true))
             && (!('lastLoginAt' in incoming()) || incoming().lastLoginAt == request.time || ('lastLoginAt' in existing() && incoming().lastLoginAt == existing().lastLoginAt))
           ) ||
           (
@@ -298,11 +307,11 @@ service cloud.firestore {
       match /addresses/{addressId} {
         allow get: if isValidId(userId) && isValidId(addressId) && (isOwner(userId) || isAdmin());
         allow list: if isValidId(userId) && (isOwner(userId) || isAdmin());
-        allow create: if isValidId(userId) && isValidId(addressId) && isVerified() && isOwner(userId)
+        allow create: if isValidId(userId) && isValidId(addressId) && isSignedIn() && isOwner(userId)
           && isValidAddress(incoming(), userId)
           && incoming().id == addressId
           && incoming().createdAt == request.time;
-        allow update: if isValidId(userId) && isValidId(addressId) && isVerified() && isOwner(userId)
+        allow update: if isValidId(userId) && isValidId(addressId) && isSignedIn() && isOwner(userId)
           && isValidAddress(incoming(), userId)
           && incoming().id == existing().id
           && incoming().userId == existing().userId
@@ -315,7 +324,7 @@ service cloud.firestore {
     match /orders/{orderId} {
       allow get: if isValidId(orderId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
       allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isValidId(orderId) && isVerified()
+      allow create: if isValidId(orderId) && isSignedIn()
         && isValidOrder(incoming())
         && incoming().id == orderId
         && incoming().userId == request.auth.uid

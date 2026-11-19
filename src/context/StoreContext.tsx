@@ -15,6 +15,7 @@ import {
   DEMO_PRODUCTS,
 } from '../data/seedCatalog';
 import type {
+  AuthProviderId,
   BrazilianAddress,
   CartItem,
   CategoryItem,
@@ -50,6 +51,7 @@ import {
   normalizeUserProfileRecord,
   sanitizeCustomerString,
 } from '../utils/customers';
+import { extractAuthProviders, mergeAuthProviders } from '../utils/authValidation';
 
 const CART_STORAGE_KEY = 'complex_cart_v1';
 const DEMO_ORDERS_STORAGE_KEY = 'complex_demo_orders_v1';
@@ -113,6 +115,15 @@ export interface AuthContextValue {
   isAdmin: boolean;
   userProfile: UserProfile | null;
   signInWithGoogle: () => Promise<void>;
+  signUpWithEmail: (input: {
+    displayName: string;
+    email: string;
+    password: string;
+  }) => Promise<{ verificationEmailSent: boolean }>;
+  signInWithEmail: (input: { email: string; password: string }) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
+  resendVerificationEmail: () => Promise<void>;
+  refreshEmailVerificationStatus: () => Promise<boolean>;
   logout: () => Promise<void>;
   validateCoupon: (code: string) => Promise<CouponRecord | null>;
   submitOrder: (order: Omit<OrderRecord, 'createdAt' | 'updatedAt'>) => Promise<OrderRecord>;
@@ -315,11 +326,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const ensureUserProfileRecord = useCallback(
     async (
       firebaseUser: User,
-      options?: { touchLastLogin?: boolean }
+      options?: {
+        touchLastLogin?: boolean;
+        displayNameOverride?: string;
+        fallbackProvider?: AuthProviderId;
+      }
     ): Promise<UserProfile | null> => {
       const { db, doc, getDoc, serverTimestamp, setDoc, updateDoc } =
         await getFirebaseServices();
       const profileRef = doc(db, 'users', firebaseUser.uid);
+
+      const extractedProviders = extractAuthProviders(firebaseUser.providerData);
+      const effectiveProviders: AuthProviderId[] =
+        extractedProviders.length > 0
+          ? extractedProviders
+          : options?.fallbackProvider
+            ? [options.fallbackProvider]
+            : [];
+      const currentEmailVerified = Boolean(firebaseUser.emailVerified);
 
       const profileSnap = await getDoc(profileRef);
       if (profileSnap.exists()) {
@@ -328,40 +352,71 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           firebaseUser.uid
         );
 
-        if (options?.touchLastLogin && firebaseUser.emailVerified) {
+        const mergedProviders = mergeAuthProviders(
+          existingProfile.authProviders,
+          effectiveProviders
+        );
+        const existingProviders = existingProfile.authProviders ?? [];
+        const providersChanged =
+          mergedProviders.length > 0 &&
+          (mergedProviders.length !== existingProviders.length ||
+            mergedProviders.some((p, i) => existingProviders[i] !== p));
+        const verifiedChanged = existingProfile.emailVerified !== currentEmailVerified;
+
+        if (options?.touchLastLogin || providersChanged || verifiedChanged) {
           const nowIso = new Date().toISOString();
+          const updatePayload: Record<string, unknown> = {
+            updatedAt: serverTimestamp(),
+          };
+          if (options?.touchLastLogin) {
+            updatePayload.lastLoginAt = serverTimestamp();
+          }
+          if (providersChanged) {
+            updatePayload.authProviders = mergedProviders;
+          }
+          if (verifiedChanged) {
+            updatePayload.emailVerified = currentEmailVerified;
+          }
           try {
-            await updateDoc(profileRef, {
-              lastLoginAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            });
-            touchedLoginUidsRef.current.add(firebaseUser.uid);
+            await updateDoc(profileRef, updatePayload);
+            if (options?.touchLastLogin) {
+              touchedLoginUidsRef.current.add(firebaseUser.uid);
+            }
             return {
               ...existingProfile,
-              lastLoginAt: nowIso,
+              ...(mergedProviders.length > 0 ? { authProviders: mergedProviders } : {}),
+              emailVerified: currentEmailVerified,
+              ...(options?.touchLastLogin ? { lastLoginAt: nowIso } : {}),
               updatedAt: nowIso,
             };
           } catch (error) {
-            console.error('Falha ao atualizar último acesso do cliente:', error);
+            console.error('Falha ao atualizar metadados do perfil do cliente:', error);
           }
         }
 
         return existingProfile;
       }
 
-      if (!firebaseUser.emailVerified || !firebaseUser.email) {
+      if (!firebaseUser.email) {
         return null;
       }
 
       const nowIso = new Date().toISOString();
+      const resolvedDisplayName =
+        sanitizeCustomerString(options?.displayNameOverride, 120) ||
+        sanitizeCustomerString(firebaseUser.displayName, 120) ||
+        'Cliente COMPLEX';
+
       const createPayload = buildCustomerCreatePayload(
         {
           uid: firebaseUser.uid,
-          displayName: firebaseUser.displayName,
+          displayName: resolvedDisplayName,
           email: firebaseUser.email,
           cpf: '',
           phone: '',
           status: 'active',
+          authProviders: effectiveProviders,
+          emailVerified: currentEmailVerified,
         },
         serverTimestamp()
       );
@@ -434,20 +489,25 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
           const adminPromise = bootAdmin
             ? Promise.resolve(true)
-            : getDoc(doc(db, 'admins', firebaseUser.uid))
-                .then((snap) => snap.exists())
-                .catch(() => false);
+            : firebaseUser.emailVerified
+              ? getDoc(doc(db, 'admins', firebaseUser.uid))
+                  .then((snap) => snap.exists())
+                  .catch(() => false)
+              : Promise.resolve(false);
 
           const shouldTouchLogin = !touchedLoginUidsRef.current.has(firebaseUser.uid);
           const profilePromise = ensureUserProfileRecord(firebaseUser, {
             touchLastLogin: shouldTouchLogin,
           }).catch((error) => {
             console.error('Erro ao sincronizar perfil do cliente no Firestore:', error);
+            const fallbackProviders = extractAuthProviders(firebaseUser.providerData);
             return {
               uid: firebaseUser.uid,
               displayName: firebaseUser.displayName || 'Cliente COMPLEX',
               email: (firebaseUser.email || '').toLowerCase(),
               status: 'active' as CustomerAccountStatus,
+              ...(fallbackProviders.length > 0 ? { authProviders: fallbackProviders } : {}),
+              emailVerified: Boolean(firebaseUser.emailVerified),
             };
           });
 
@@ -522,50 +582,164 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [ensureUserProfileRecord, refreshCatalog]);
 
-  const signInWithGoogle = useCallback(async () => {
-    const { auth, db, doc, getDoc, googleAuthProvider, signInWithPopup } =
-      await getFirebaseServices();
-    const credential = await signInWithPopup(auth, googleAuthProvider);
-    const signedInUser = credential.user;
+  const syncSignedInUser = useCallback(
+    async (
+      signedInUser: User,
+      options?: {
+        displayNameOverride?: string;
+        fallbackProvider?: AuthProviderId;
+      }
+    ) => {
+      const { db, doc, getDoc } = await getFirebaseServices();
+      setUser(signedInUser);
 
-    setUser(signedInUser);
-    const bootAdmin =
-      signedInUser.email === BOOTSTRAPPED_ADMIN_EMAIL && signedInUser.emailVerified;
-    const resolvedAdmin = bootAdmin
-      ? true
-      : await getDoc(doc(db, 'admins', signedInUser.uid))
-          .then((snap) => snap.exists())
-          .catch(() => false);
+      const bootAdmin =
+        signedInUser.email === BOOTSTRAPPED_ADMIN_EMAIL && signedInUser.emailVerified;
+      const resolvedAdmin = bootAdmin
+        ? true
+        : signedInUser.emailVerified
+          ? await getDoc(doc(db, 'admins', signedInUser.uid))
+              .then((snap) => snap.exists())
+              .catch(() => false)
+          : false;
 
-    setIsAdmin(resolvedAdmin);
-    setAuthReady(true);
+      setIsAdmin(resolvedAdmin);
+      setAuthReady(true);
 
-    // Guarantee persistent customer profile creation/lastLoginAt sync immediately upon login
-    try {
-      const persistedProfile = await ensureUserProfileRecord(signedInUser, {
+      // Guarantee persistent customer profile creation/lastLoginAt sync immediately upon auth
+      const ensureOpts = {
         touchLastLogin: true,
-      });
-      if (persistedProfile) {
-        setUserProfile(persistedProfile);
-      }
-    } catch (firstError) {
+        displayNameOverride: options?.displayNameOverride,
+        fallbackProvider: options?.fallbackProvider,
+      };
       try {
-        const retriedProfile = await ensureUserProfileRecord(signedInUser, {
-          touchLastLogin: true,
-        });
-        if (retriedProfile) {
-          setUserProfile(retriedProfile);
+        const persistedProfile = await ensureUserProfileRecord(signedInUser, ensureOpts);
+        if (persistedProfile) {
+          setUserProfile(persistedProfile);
         }
-      } catch (secondError) {
-        console.error(
-          'Falha persistente ao gravar perfil do cliente no Firestore após login:',
-          firstError,
-          secondError
-        );
-        showToast('Login concluído. Tentaremos sincronizar seu perfil novamente em instantes.');
+      } catch (firstError) {
+        try {
+          const retriedProfile = await ensureUserProfileRecord(signedInUser, ensureOpts);
+          if (retriedProfile) {
+            setUserProfile(retriedProfile);
+          }
+        } catch (secondError) {
+          console.error(
+            'Falha persistente ao gravar perfil do cliente no Firestore após autenticação:',
+            firstError,
+            secondError
+          );
+          showToast('Acesso concluído. Tentaremos sincronizar seu perfil novamente em instantes.');
+        }
       }
+    },
+    [ensureUserProfileRecord, showToast]
+  );
+
+  const signInWithGoogle = useCallback(async () => {
+    const { auth, googleAuthProvider, signInWithPopup } = await getFirebaseServices();
+    auth.languageCode = 'pt-BR';
+    const credential = await signInWithPopup(auth, googleAuthProvider);
+    await syncSignedInUser(credential.user, { fallbackProvider: 'google' });
+  }, [syncSignedInUser]);
+
+  const signUpWithEmail = useCallback(
+    async (input: {
+      displayName: string;
+      email: string;
+      password: string;
+    }): Promise<{ verificationEmailSent: boolean }> => {
+      const {
+        auth,
+        createUserWithEmailAndPassword,
+        sendEmailVerification,
+        updateProfile,
+      } = await getFirebaseServices();
+      auth.languageCode = 'pt-BR';
+
+      const cleanName = sanitizeCustomerString(input.displayName, 120);
+      const cleanEmail = input.email.trim().toLowerCase();
+      const credential = await createUserWithEmailAndPassword(auth, cleanEmail, input.password);
+      const createdUser = credential.user;
+
+      if (cleanName) {
+        try {
+          await updateProfile(createdUser, { displayName: cleanName });
+        } catch (profileErr) {
+          console.error('Não foi possível atualizar displayName no Firebase Auth:', profileErr);
+        }
+      }
+
+      await syncSignedInUser(createdUser, {
+        displayNameOverride: cleanName,
+        fallbackProvider: 'password',
+      });
+
+      let verificationEmailSent = false;
+      try {
+        await sendEmailVerification(createdUser);
+        verificationEmailSent = true;
+      } catch (verifyErr) {
+        console.error('Não foi possível enviar o e-mail de confirmação:', verifyErr);
+      }
+
+      return { verificationEmailSent };
+    },
+    [syncSignedInUser]
+  );
+
+  const signInWithEmail = useCallback(
+    async (input: { email: string; password: string }) => {
+      const { auth, signInWithEmailAndPassword } = await getFirebaseServices();
+      auth.languageCode = 'pt-BR';
+      const cleanEmail = input.email.trim().toLowerCase();
+      const credential = await signInWithEmailAndPassword(auth, cleanEmail, input.password);
+      await syncSignedInUser(credential.user, { fallbackProvider: 'password' });
+    },
+    [syncSignedInUser]
+  );
+
+  const sendPasswordReset = useCallback(async (email: string) => {
+    const { auth, sendPasswordResetEmail } = await getFirebaseServices();
+    auth.languageCode = 'pt-BR';
+    await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+  }, []);
+
+  const resendVerificationEmail = useCallback(async () => {
+    const { auth, sendEmailVerification } = await getFirebaseServices();
+    if (!auth.currentUser) {
+      throw new Error('Faça login para reenviar o e-mail de confirmação.');
     }
-  }, [ensureUserProfileRecord, showToast]);
+    auth.languageCode = 'pt-BR';
+    await sendEmailVerification(auth.currentUser);
+  }, []);
+
+  const refreshEmailVerificationStatus = useCallback(async (): Promise<boolean> => {
+    const { auth, db, doc, getDoc } = await getFirebaseServices();
+    if (!auth.currentUser) return false;
+    await auth.currentUser.reload();
+    await auth.currentUser.getIdToken(true);
+    const refreshedUser = auth.currentUser;
+    setUser(refreshedUser);
+
+    if (refreshedUser.emailVerified) {
+      const bootAdmin = refreshedUser.email === BOOTSTRAPPED_ADMIN_EMAIL;
+      const resolvedAdmin = bootAdmin
+        ? true
+        : await getDoc(doc(db, 'admins', refreshedUser.uid))
+            .then((snap) => snap.exists())
+            .catch(() => false);
+      setIsAdmin(resolvedAdmin);
+    }
+
+    const updatedProfile = await ensureUserProfileRecord(refreshedUser, {
+      touchLastLogin: false,
+    });
+    if (updatedProfile) {
+      setUserProfile(updatedProfile);
+    }
+    return Boolean(refreshedUser.emailVerified);
+  }, [ensureUserProfileRecord]);
 
   const logout = useCallback(async () => {
     const { auth, signOut } = await getFirebaseServices();
@@ -731,8 +905,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         serverOrder = sanitized.order;
       }
 
-      // 2. If signed in & verified, persist to Firestore /orders/{id}
-      if (user && user.emailVerified) {
+      // 2. If signed in, persist to Firestore /orders/{id} (works for both Google & Email/Password accounts)
+      if (user) {
         const firestorePath = `orders/${serverOrder.id}`;
         const {
           db,
@@ -1335,6 +1509,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       isAdmin,
       userProfile,
       signInWithGoogle,
+      signUpWithEmail,
+      signInWithEmail,
+      sendPasswordReset,
+      resendVerificationEmail,
+      refreshEmailVerificationStatus,
       logout,
       validateCoupon,
       submitOrder,
@@ -1361,6 +1540,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       isAdmin,
       userProfile,
       signInWithGoogle,
+      signUpWithEmail,
+      signInWithEmail,
+      sendPasswordReset,
+      resendVerificationEmail,
+      refreshEmailVerificationStatus,
       logout,
       validateCoupon,
       submitOrder,

@@ -166,6 +166,7 @@ export interface CouponRecord {
 }
 
 export type CustomerAccountStatus = 'active' | 'inactive';
+export type AuthProviderId = 'google' | 'password';
 
 export interface UserProfile {
   uid: string;
@@ -174,6 +175,8 @@ export interface UserProfile {
   cpf?: string;
   phone?: string;
   status?: CustomerAccountStatus;
+  authProviders?: AuthProviderId[];
+  emailVerified?: boolean;
   createdAt?: string;
   updatedAt?: string;
   lastLoginAt?: string;

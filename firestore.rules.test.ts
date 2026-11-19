@@ -16,25 +16,64 @@ test('firestore.rules enforces default-deny catch-all and email_verified checks'
   assert.match(rulesSource, /affectedKeys\(\)\.hasOnly/);
 });
 
-test('firestore.rules restricts /users listing strictly to admins and guards status/email immutability', () => {
+test('firestore.rules restricts /users listing strictly to admins and guards status/email/authProviders immutability', () => {
   assert.match(rulesSource, /match \/users\/\{userId\}[\s\S]*allow list: if isAdmin\(\);/);
   assert.match(rulesSource, /incoming\(\)\.email == existing\(\)\.email/);
+  assert.match(rulesSource, /incoming\(\)\.email == request\.auth\.token\.email\.lower\(\)/);
   assert.match(rulesSource, /data\.status in \['active', 'inactive'\]/);
-  assert.match(rulesSource, /'displayName', 'cpf', 'phone', 'lastLoginAt', 'updatedAt'/);
+  assert.match(rulesSource, /data\.authProviders\.hasOnly\(\['google', 'password'\]\)/);
+  assert.match(
+    rulesSource,
+    /'displayName', 'cpf', 'phone', 'authProviders', 'emailVerified', 'lastLoginAt', 'updatedAt'/
+  );
   assert.match(rulesSource, /'displayName', 'cpf', 'phone', 'status', 'updatedAt'/);
 });
 
-test('UserProfile validation blocks shadow fields, cross-user spoofing, and self-status tampering', () => {
-  // Valid owner creation
-  const validOwner = validateUserProfilePayload(
+test('UserProfile validation blocks shadow fields, cross-user spoofing, emailVerified spoofing, and self-status tampering', () => {
+  // Valid email/password owner creation (before email verification)
+  const validEmailSignup = validateUserProfilePayload(
     {
-      uid: 'user-a',
-      displayName: 'Cliente A',
-      email: 'a@exemplo.com',
+      uid: 'user-pw',
+      displayName: 'Cliente Senha',
+      email: 'senha@exemplo.com',
       cpf: '',
       phone: '',
       status: 'active',
+      authProviders: ['password'],
+      emailVerified: false,
       lastLoginAt: 'now',
+      createdAt: 'now',
+      updatedAt: 'now',
+    },
+    'user-pw',
+    'user-pw',
+    false
+  );
+  assert.equal(validEmailSignup.valid, true);
+
+  // Spoofing emailVerified: true when token has emailVerified: false rejected
+  const spoofedVerified = validateUserProfilePayload(
+    {
+      uid: 'user-pw',
+      email: 'senha@exemplo.com',
+      status: 'active',
+      authProviders: ['password'],
+      emailVerified: true,
+      createdAt: 'now',
+      updatedAt: 'now',
+    },
+    'user-pw',
+    'user-pw',
+    false
+  );
+  assert.equal(spoofedVerified.valid, false);
+
+  // Invalid authProviders entry rejected
+  const badProvider = validateUserProfilePayload(
+    {
+      uid: 'user-a',
+      email: 'a@exemplo.com',
+      authProviders: ['admin-bypass'],
       createdAt: 'now',
       updatedAt: 'now',
     },
@@ -42,7 +81,7 @@ test('UserProfile validation blocks shadow fields, cross-user spoofing, and self
     'user-a',
     true
   );
-  assert.equal(validOwner.valid, true);
+  assert.equal(badProvider.valid, false);
 
   // Shadow privilege / sensitive credential fields rejected
   const shadowRole = validateUserProfilePayload(
@@ -105,7 +144,7 @@ test('UserProfile validation blocks shadow fields, cross-user spoofing, and self
   );
   assert.equal(selfInactive.valid, false);
 
-  // Admin backfill of missing customer profile allowed when schema-compliant
+  // Admin backfill of missing customer profile allowed when verified admin
   const adminBackfill = validateUserProfilePayload(
     {
       uid: 'user-legacy',

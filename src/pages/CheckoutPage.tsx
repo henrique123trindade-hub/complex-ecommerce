@@ -487,9 +487,20 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
             <div className="lg:col-span-7 space-y-8">
               {/* 1. Dados Pessoais */}
               <section className="space-y-4">
-                <h2 className="font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#99968F]">
-                  01 / Dados Pessoais
-                </h2>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="font-mono-tabular text-xs uppercase tracking-[0.14em] text-[#99968F]">
+                    01 / Dados Pessoais
+                  </h2>
+                  {!user && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('/account?redirect=/checkout')}
+                      className="font-mono-tabular text-[11px] text-[#171717]/75 underline underline-offset-4 hover:text-[#171717] transition-colors cursor-pointer"
+                    >
+                      Já tem conta ou quer salvar seu pedido? Entrar / Cadastrar
+                    </button>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
                     <label htmlFor="chk-name" className="block text-xs mb-1.5">

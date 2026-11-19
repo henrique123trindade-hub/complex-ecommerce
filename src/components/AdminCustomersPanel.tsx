@@ -28,6 +28,7 @@ import {
   type CustomerSortOption,
   type CustomerStatusFilter,
 } from '../utils/customers';
+import { formatAuthProvidersLabel } from '../utils/authValidation';
 
 interface AdminCustomersPanelProps {
   customers: UserProfile[];
@@ -269,7 +270,22 @@ export const AdminCustomersPanel: React.FC<AdminCustomersPanelProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-xs">
+            <div>
+              <p className="font-mono-tabular text-[10px] uppercase text-[#99968F]">
+                Método de Acesso
+              </p>
+              <p className="font-mono-tabular mt-1">
+                {formatAuthProvidersLabel(selectedCustomer.profile.authProviders)}
+              </p>
+              {typeof selectedCustomer.profile.emailVerified === 'boolean' && (
+                <p className="font-mono-tabular text-[10px] text-[#99968F] mt-0.5">
+                  {selectedCustomer.profile.emailVerified
+                    ? 'E-mail verificado'
+                    : 'Aguardando verificação'}
+                </p>
+              )}
+            </div>
             <div>
               <p className="font-mono-tabular text-[10px] uppercase text-[#99968F]">
                 Data de Cadastro
@@ -528,7 +544,7 @@ export const AdminCustomersPanel: React.FC<AdminCustomersPanelProps> = ({
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar cliente por nome, e-mail ou telefone..."
+            placeholder="Buscar cliente por nome, e-mail, telefone ou método..."
             aria-label="Buscar clientes"
             className="w-full h-10 pl-9 pr-3 bg-transparent border border-[#171717]/20 text-sm focus:outline-none focus:border-[#171717]"
           />
@@ -598,6 +614,7 @@ export const AdminCustomersPanel: React.FC<AdminCustomersPanelProps> = ({
                   <tr className="border-b border-[#171717]/15 font-mono-tabular text-[10px] uppercase tracking-[0.12em] text-[#99968F]">
                     <th className="py-3.5 px-4 font-normal">Cliente</th>
                     <th className="py-3.5 px-4 font-normal">E-mail</th>
+                    <th className="py-3.5 px-4 font-normal">Método</th>
                     <th className="py-3.5 px-4 font-normal">Cadastro</th>
                     <th className="py-3.5 px-4 font-normal">Último Acesso</th>
                     <th className="py-3.5 px-4 font-normal">Status</th>
@@ -628,6 +645,9 @@ export const AdminCustomersPanel: React.FC<AdminCustomersPanelProps> = ({
                         </td>
                         <td className="py-3.5 px-4 font-mono-tabular text-[#171717]/80">
                           {row.profile.email}
+                        </td>
+                        <td className="py-3.5 px-4 font-mono-tabular text-[#171717]/80 whitespace-nowrap">
+                          {formatAuthProvidersLabel(row.profile.authProviders)}
                         </td>
                         <td className="py-3.5 px-4 font-mono-tabular text-[#99968F] whitespace-nowrap">
                           {formatCustomerDateTime(row.profile.createdAt)}
@@ -703,6 +723,12 @@ export const AdminCustomersPanel: React.FC<AdminCustomersPanelProps> = ({
 
                     <div className="grid grid-cols-2 gap-2 font-mono-tabular text-[11px] text-[#99968F]">
                       <div>
+                        <span className="block text-[10px] uppercase">Método</span>
+                        <span className="text-[#171717]">
+                          {formatAuthProvidersLabel(row.profile.authProviders)}
+                        </span>
+                      </div>
+                      <div>
                         <span className="block text-[10px] uppercase">Cadastro</span>
                         <span className="text-[#171717]">
                           {formatCustomerDateTime(row.profile.createdAt)}
@@ -715,13 +741,9 @@ export const AdminCustomersPanel: React.FC<AdminCustomersPanelProps> = ({
                         </span>
                       </div>
                       <div>
-                        <span className="block text-[10px] uppercase">Pedidos reais</span>
-                        <span className="text-[#171717]">{row.orderCount}</span>
-                      </div>
-                      <div>
-                        <span className="block text-[10px] uppercase">Total gasto</span>
+                        <span className="block text-[10px] uppercase">Pedidos / Total</span>
                         <span className="text-[#171717] font-medium">
-                          {formatBrl(row.totalSpentBrl)}
+                          {row.orderCount} · {formatBrl(row.totalSpentBrl)}
                         </span>
                       </div>
                     </div>

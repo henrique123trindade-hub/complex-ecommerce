@@ -104,8 +104,11 @@ export function validateUserProfilePayload(
   const isAdmin = Boolean(options?.isAdmin);
   const mode = options?.mode ?? 'create';
 
-  if (!authUid || !emailVerified) {
-    return { valid: false, reason: 'Authenticated verified user required' };
+  if (!authUid) {
+    return { valid: false, reason: 'Authenticated user required' };
+  }
+  if (isAdmin && !emailVerified) {
+    return { valid: false, reason: 'Admin actions require verified email' };
   }
   if (!isValidBlueprintId(targetUserId)) {
     return { valid: false, reason: 'Invalid target user id' };
@@ -121,6 +124,8 @@ export function validateUserProfilePayload(
     'cpf',
     'phone',
     'status',
+    'authProviders',
+    'emailVerified',
     'lastLoginAt',
     'createdAt',
     'updatedAt',
@@ -154,6 +159,24 @@ export function validateUserProfilePayload(
   }
   if ('status' in payload && payload.status !== 'active' && payload.status !== 'inactive') {
     return { valid: false, reason: 'Invalid account status' };
+  }
+  if ('authProviders' in payload) {
+    if (
+      !Array.isArray(payload.authProviders) ||
+      payload.authProviders.length < 1 ||
+      payload.authProviders.length > 5 ||
+      !payload.authProviders.every((p) => p === 'google' || p === 'password')
+    ) {
+      return { valid: false, reason: 'Invalid authProviders list' };
+    }
+  }
+  if ('emailVerified' in payload) {
+    if (typeof payload.emailVerified !== 'boolean') {
+      return { valid: false, reason: 'Invalid emailVerified flag' };
+    }
+    if (!isAdmin && payload.emailVerified !== emailVerified) {
+      return { valid: false, reason: 'Cannot spoof emailVerified flag' };
+    }
   }
   if (mode === 'create' && !isAdmin && 'status' in payload && payload.status !== 'active') {
     return { valid: false, reason: 'Self-registration must initialize as active' };
